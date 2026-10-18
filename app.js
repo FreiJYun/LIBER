@@ -145,7 +145,7 @@ async function postsPage() {
  const rows = await allPosts(false);
  const cats=Cats.filterButtons('posts',activeCategory);
  const q=searchQuery.trim().toLocaleLowerCase();
- const filtered=rows.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
+ const filtered=rows.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),Cats.postName(p),...(p.tags||[])].join(' ').toLocaleLowerCase().includes(q)));
  return `${banner('THE JOURNAL','기록의 서가','주제에 얽매이지 않는 생각과 이야기들을 모았습니다.')}<section class="content-section"><div class="container"><div class="filter-bar"><div class="filter-chips" role="group" aria-label="카테고리 선택">${cats}</div><input type="search" class="search-input" id="postSearch" placeholder="제목 또는 내용 검색" aria-label="게시글 검색" value="${escapeHTML(searchQuery)}" /></div><div class="post-result-label">검색 결과 <strong>${filtered.length}</strong>개의 글</div><div id="postResults">${filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`}</div></div></section>`;
 }
 function parseYouTube(url) { try { const u = new URL(url); let id = '';
@@ -233,7 +233,7 @@ function showError(e) { console.error(e); app.classList.remove('is-leaving'); ap
 function setupSearch() {
  const input=$('#postSearch'); if(!input) return;
  input.addEventListener('input',async()=>{searchQuery=input.value; const pos=input.selectionStart; const oldY=window.scrollY; const all=await allPosts(false);
-  const q=searchQuery.trim().toLocaleLowerCase(), filtered=all.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
+  const q=searchQuery.trim().toLocaleLowerCase(), filtered=all.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),Cats.postName(p),...(p.tags||[])].join(' ').toLocaleLowerCase().includes(q)));
   clearMediaURLs(); $('#postResults').innerHTML=filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`;
   $('.post-result-label').innerHTML=`검색 결과 <strong>${filtered.length}</strong>개의 글`; window.scrollTo(0,oldY);
  });
