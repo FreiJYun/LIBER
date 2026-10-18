@@ -106,6 +106,36 @@ function move(k,id,offset){
  siblings.forEach((s,i)=>s.order=i);
  const a=item.order;item.order=other.order;other.order=a;persist();
 }
+function sortedSiblings(k,parentId){
+ return list(k).filter(x=>x.parentId===parentId).sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,'ko'));
+}
+function moveToIndex(k,id,index){
+ const item=find(k,id);if(!item)return false;
+ const original=sortedSiblings(k,item.parentId);
+ const current=original.findIndex(x=>x.id===id);
+ const target=Math.max(0,Math.min(original.length-1,index));
+ if(current===target)return false;
+ original.splice(current,1);
+ original.splice(target,0,item);
+ original.forEach((x,i)=>x.order=i);
+ persist();return true;
+}
+function moveToEdge(k,id,edge){
+ const item=find(k,id);if(!item)return false;
+ return moveToIndex(k,id,edge==='first'?0:sortedSiblings(k,item.parentId).length-1);
+}
+function moveRelative(k,sourceId,targetId,after){
+ const source=find(k,sourceId),target=find(k,targetId);
+ if(!source||!target||source.id===target.id||source.parentId!==target.parentId)return false;
+ const original=sortedSiblings(k,source.parentId);
+ const siblings=original.filter(x=>x.id!==sourceId);
+ const position=siblings.findIndex(x=>x.id===targetId);
+ if(position<0)return false;
+ siblings.splice(position+(after?1:0),0,source);
+ if(original.every((x,i)=>x.id===siblings[i].id))return false;
+ siblings.forEach((x,i)=>x.order=i);
+ persist();return true;
+}
 async function erase(k,id){
  const item=find(k,id);if(!item)return;
  if(list(k).some(x=>x.parentId===id))throw Error('먼저 하위 카테고리를 다른 곳으로 이동하거나 삭제해 주세요.');
@@ -125,11 +155,11 @@ function page(){
  (managerAlert?'<p class="category-feedback" role="status">'+esc(managerAlert)+'</p>':'')+'</div>'+
  '<div class="category-tabs" role="group" aria-label="카테고리 종류"><button type="button" data-category-kind="posts" class="'+(kind==='posts'?'active':'')+'">게시글 카테고리</button><button type="button" data-category-kind="neighbors" class="'+(kind==='neighbors'?'active':'')+'">이웃 카테고리</button></div>'+
  '<div class="category-manager-grid"><section class="panel category-tree-panel"><div class="category-tree-head"><h2>분류 목록</h2><button class="btn btn-sm btn-outline" type="button" id="categoryNewRoot">+ 최상위 추가</button></div>'+
- '<div class="category-tree-list" role="list">'+(nodes.length?nodes.map(x=>'<button type="button" role="listitem" data-cat-select="'+esc(x.id)+'" class="category-tree-row '+(selected===x.id?'active':'')+'" style="--category-depth:'+Math.min(x.depth,12)+'"><span class="category-tree-mark">'+(nodes.some(y=>y.parentId===x.id)?'▾':'·')+'</span><span>'+esc(x.name)+'</span></button>').join(''):'<p>카테고리가 없습니다. 최상위 분류를 추가해 주세요.</p>')+'</div></section>'+
+ '<p class="category-drag-hint">⠿ 카테고리를 끌어 순서를 바꿀 수 있습니다. 같은 단계끼리 이동합니다.</p><div class="category-tree-list" role="list">'+(nodes.length?nodes.map(x=>'<button type="button" role="listitem" draggable="true" data-cat-select="'+esc(x.id)+'" class="category-tree-row '+(selected===x.id?'active':'')+'" style="--category-depth:'+Math.min(x.depth,12)+'"><span class="category-tree-drag-mark" aria-hidden="true">⠿</span><span class="category-tree-mark">'+(nodes.some(y=>y.parentId===x.id)?'▾':'·')+'</span><span>'+esc(x.name)+'</span></button>').join(''):'<p>카테고리가 없습니다. 최상위 분류를 추가해 주세요.</p>')+'</div></section>'+
  '<section class="panel category-edit-panel"><h2>'+ (item?'카테고리 편집':'새 카테고리 추가')+'</h2><form id="categoryManageForm"><label class="category-label">이름<input id="catName" name="name" required maxlength="50" placeholder="예: 로마 공화정" value="'+esc(item?.name||'')+'"></label>'+
  '<label class="category-label">상위 카테고리<select id="catParent" name="parentId">'+parentOptions+'</select></label>'+
  '<div class="category-actions"><button class="btn" type="submit">'+(item?'변경 저장':'+ 추가')+'</button>'+
- (item?'<button class="btn btn-outline" type="button" id="categoryAddChild">+ 하위 추가</button><button class="btn btn-outline" type="button" id="categoryMoveUp">↑ 위로</button><button class="btn btn-outline" type="button" id="categoryMoveDown">↓ 아래로</button><button class="btn btn-outline" type="button" id="categoryDelete">삭제</button>':'')+'</div></form><p class="category-tip">'+(item?esc(breadcrumb(kind,item.id)):'왼쪽에서 분류를 선택해 수정하거나, 이름을 입력해 새 분류를 만드세요.')+'</p></section></div>'+
+ (item?'<button class="btn btn-outline" type="button" id="categoryAddChild">+ 하위 추가</button><button class="btn btn-outline" type="button" id="categoryMoveFirst">⇤ 맨 위로</button><button class="btn btn-outline" type="button" id="categoryMoveUp">↑ 위로</button><button class="btn btn-outline" type="button" id="categoryMoveDown">↓ 아래로</button><button class="btn btn-outline" type="button" id="categoryMoveLast">⇥ 맨 아래로</button><button class="btn btn-outline" type="button" id="categoryDelete">삭제</button>':'')+'</div></form><p class="category-tip">'+(item?esc(breadcrumb(kind,item.id)):'왼쪽에서 분류를 선택해 수정하거나, 이름을 입력해 새 분류를 만드세요.')+'</p></section></div>'+
  '<div class="neighbor-publish category-publish"><h2>카테고리 공개하기</h2><p>카테고리 편집은 우선 현재 브라우저에만 임시 저장됩니다. <strong>모든 방문자에게 공개하려면</strong> JSON을 복사해 GitHub의 <code>categories.json</code> 파일을 교체하고 커밋하세요. 게시글 본문과 이웃 목록은 기존 저장 방식을 유지합니다.</p>'+
  '<div class="neighbor-form-actions"><button class="btn" type="button" id="categoryCopy">① JSON 복사</button><a class="btn btn-outline" target="_blank" rel="noopener noreferrer" href="https://github.com/FreiJYun/LIBER/edit/main/categories.json">② GitHub 파일 편집 ↗</a><button class="btn btn-outline" type="button" id="categoryDownload">JSON 다운로드</button><button class="btn btn-outline" type="button" id="categoryReset">로컬 변경 취소</button></div></div></div></section>';
 }
@@ -154,6 +184,51 @@ function setup(){
  });
  root.querySelector('#categoryMoveUp')?.addEventListener('click',()=>{move(kind,selected,-1);refresh();});
  root.querySelector('#categoryMoveDown')?.addEventListener('click',()=>{move(kind,selected,1);refresh();});
+ root.querySelector('#categoryMoveFirst')?.addEventListener('click',()=>{
+  if(moveToEdge(kind,selected,'first'))notice('선택한 카테고리를 같은 단계의 맨 위로 옮겼습니다.');else refresh();
+ });
+ root.querySelector('#categoryMoveLast')?.addEventListener('click',()=>{
+  if(moveToEdge(kind,selected,'last'))notice('선택한 카테고리를 같은 단계의 맨 아래로 옮겼습니다.');else refresh();
+ });
+ let draggedId=null;
+ const tree=root.querySelector('.category-tree-list');
+ const clearHover=()=>tree?.querySelectorAll('.drag-before,.drag-after').forEach(el=>el.classList.remove('drag-before','drag-after'));
+ tree?.addEventListener('dragstart',event=>{
+  const row=event.target.closest('[data-cat-select]');
+  if(!row)return;
+  draggedId=row.dataset.catSelect;
+  event.dataTransfer.effectAllowed='move';
+  event.dataTransfer.setData('text/plain',draggedId);
+  row.classList.add('dragging');
+ });
+ tree?.addEventListener('dragover',event=>{
+  const row=event.target.closest('[data-cat-select]');
+  if(!row||!draggedId||row.dataset.catSelect===draggedId)return;
+  const a=find(kind,draggedId),b=find(kind,row.dataset.catSelect);
+  if(!a||!b||a.parentId!==b.parentId)return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect='move';
+  clearHover();
+  const rect=row.getBoundingClientRect();
+  row.classList.add(event.clientY>rect.top+rect.height/2?'drag-after':'drag-before');
+ });
+ tree?.addEventListener('drop',event=>{
+  const row=event.target.closest('[data-cat-select]');
+  if(!row||!draggedId)return;
+  const sourceId=draggedId,targetId=row.dataset.catSelect;
+  const a=find(kind,sourceId),b=find(kind,targetId);
+  if(!a||!b||a.parentId!==b.parentId){
+   clearHover();return;
+  }
+  event.preventDefault();
+  const rect=row.getBoundingClientRect(),after=event.clientY>rect.top+rect.height/2;
+  draggedId=null;
+  if(moveRelative(kind,sourceId,targetId,after)){selected=sourceId;notice('카테고리 순서를 변경했습니다. GitHub에 게시하면 모두에게 반영됩니다.');}
+  else refresh();
+ });
+ tree?.addEventListener('dragend',()=>{
+  draggedId=null;clearHover();tree.querySelectorAll('.dragging').forEach(el=>el.classList.remove('dragging'));
+ });
  root.querySelector('#categoryDelete')?.addEventListener('click',async()=>{
   try{await erase(kind,selected);refresh();}catch(e){alert(e.message);}
  });
