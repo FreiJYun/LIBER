@@ -204,12 +204,13 @@ function setActiveNav() {
 async function render() {
  const hash=location.hash || '#/home'; const parts=hash.replace(/^#\//,'').split('/'); const route=parts[0];
  clearMediaURLs(); setActiveNav(); currentRoute=route;
- if(route==='home') app.innerHTML=await home();
+ if(route==='home') app.innerHTML=(await home()) + (await window.LIBERNeighbors.homePreview());
  else if(route==='posts') app.innerHTML=await postsPage();
  else if(route==='post') app.innerHTML=await articlePage(decodeURIComponent(parts.slice(1).join('/')));
  else if(route==='write') app.innerHTML=await editorPage(parts.length>1?decodeURIComponent(parts.slice(1).join('/')):null);
  else if(route==='about') app.innerHTML=aboutPage();
  else if(route==='gallery') app.innerHTML=galleryPage();
+ else if(route==='neighbors') app.innerHTML=await window.LIBERNeighbors.render();
  else if(route==='settings') app.innerHTML=settingsPage();
  else app.innerHTML=await home();
  app.classList.remove('is-leaving'); app.classList.remove('page-in'); void app.offsetWidth; app.classList.add('page-in');
@@ -217,6 +218,7 @@ async function render() {
  if(route==='write') setupEditor();
  if(route==='settings') setupSettings();
  if(route==='posts') setupSearch();
+ if(route==='neighbors') window.LIBERNeighbors.setup();
 }
 async function pageChange() {
  const seq=++pageSwitchId;
