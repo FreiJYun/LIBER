@@ -44,3 +44,16 @@ python -m http.server 8000
 ## 서체 관련
 
 **Noto Sans KR을 기본 서체로 설정**했으며 인터넷 연결 시 Google Fonts에서 가져옵니다. 업로드하신 `NotoSansKR-VariableFont_wght.ttf` 원본은 압축파일에 다시 넣지 않았습니다. 오프라인에서 같은 서체를 쓰려면 해당 파일을 본인이 직접 `assets/fonts/` 폴더에 넣어 주세요. 폰트 업로드 기능으로 별도 서체를 등록할 수도 있습니다. 웹에서 서체를 공개할 때는 해당 글꼴의 **웹 임베딩/재배포 라이선스**를 확인하세요.
+
+## GitHub Pages 배포
+
+이 저장소의 **Settings → Pages**에서 아래와 같이 설정하세요.
+
+1. **Build and deployment → Source:** Deploy from a branch
+2. **Branch:** main
+3. **Folder:** /(root)
+4. **Save** 클릭
+
+완료 후 주소: https://freijyun.github.io/LIBER/
+
+> ⚠️ 현재 GitHub Pages에서는 프롤로그와 예시 글을 공개할 수 있지만, 방문자들이 동일한 게시글 데이터베이스를 공유하지는 않습니다. 글을 실제 발행하려면 관리자 로그인 + 서버 DB 연결이 필요합니다. 이미지 파일은 별도 스토리지 사용을 권장합니다.
