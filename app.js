@@ -338,7 +338,7 @@ async function importBackup(e) {
     if(!a.data)continue; const blob=dataURLtoBlob(a.data);if(!/^(image|video)\//.test(blob.type))continue;
     attaches.push({id:String(a.id||uid()),name:String(a.name||'첨부 파일').slice(0,200),type:blob.type,blob});
    }
-   await putPost({id:String(p.id),title:p.title.slice(0,160),subtitle:String(p.subtitle||'').slice(0,250),category:String(p.category||'기타').slice(0,40),body:sanitizeHTML(p.body),createdAt:Number(p.createdAt)||Date.now(),updatedAt:Number(p.updatedAt)||Date.now(),published:p.published!==false,demo:p.demo===true,links:Array.isArray(p.links)?p.links.filter(x=>typeof x==='string'&&/^https?:\/\//i.test(x)).slice(0,20):[],attachments:attaches});count++;
+   await putPost({id:String(p.id),title:p.title.slice(0,160),subtitle:String(p.subtitle||'').slice(0,250),category:String(p.category||'기타').slice(0,50),categoryId:Cats.find('posts',String(p.categoryId||''))?.id||Cats.byName('posts',p.category)?.id||'',tags:Array.isArray(p.tags)?p.tags.map(x=>String(x).trim().slice(0,30)).filter(Boolean).slice(0,8):[],body:sanitizeHTML(p.body),createdAt:Number(p.createdAt)||Date.now(),updatedAt:Number(p.updatedAt)||Date.now(),published:p.published!==false,demo:p.demo===true,links:Array.isArray(p.links)?p.links.filter(x=>typeof x==='string'&&/^https?:\/\//i.test(x)).slice(0,20):[],attachments:attaches});count++;
   }
   if(data.customFont?.data){const blob=dataURLtoBlob(data.customFont.data);await assetPut({id:'customFont',name:String(data.customFont.name||'custom-font'),blob});}
   if(data.config&&typeof data.config==='object')config={...defaults,...Object.fromEntries(Object.entries(data.config).filter(([k])=>k in defaults))};
