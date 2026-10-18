@@ -129,7 +129,7 @@
   }
   async function render() {
     await load();
-    return '<section id="neighborsRoot">' +
+    return '<section id="neighborsRoot" class="' + (managerOpen ? 'neighbors-managing' : '') + '">' +
       '<section class="page-banner"><div class="container"><div class="eyebrow">MY BLOGROLL · EXTERNAL LINKS</div>' +
       '<h1>이웃의 서재</h1><p>다른 곳에서 만난 좋은 글과 기록자들을 한곳에 모았습니다. 서로이웃 신청 없이, 방문할 수 있는 일방향 링크 모음입니다.</p></div></section>' +
       '<section class="content-section"><div class="container">' +
@@ -177,7 +177,7 @@
     const root = document.querySelector('#neighborsRoot');
     if (!root) return;
     const manager = root.querySelector('#neighborManager');
-    manager?.addEventListener('toggle', () => {managerOpen = manager.open;});
+    manager?.addEventListener('toggle', () => {managerOpen = manager.open; root.classList.toggle('neighbors-managing',managerOpen);});
     root.querySelector('#neighborOpenManager')?.addEventListener('click', () => {
       manager.open = true; managerOpen = true;
       manager.scrollIntoView({behavior:'smooth',block:'start'});
