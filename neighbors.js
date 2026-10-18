@@ -1,11 +1,12 @@
 /* LIBER — one-way external blogroll. Published entries live in neighbors.json. */
 (() => {
   'use strict';
+  const Cats = window.LIBERCategories;
   const DATA_URL = './neighbors.json';
   const DRAFT_KEY = 'liber_neighbors_draft_v1';
   const EDIT_URL = 'https://github.com/FreiJYun/LIBER/edit/main/neighbors.json';
   let published = [], entries = [], loaded = false, hasDraft = false;
-  let filter = '전체', query = '', editingId = null, managerOpen = false;
+  let filter = '전체', topicFilter = '전체', query = '', editingId = null, managerOpen = false;
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -36,7 +37,8 @@
     if (!url || !name) return null;
     const avatar = safeUrl(raw.avatar || '');
     return {id: String(raw.id || ('neighbor-' + index)).slice(0,90),
-      name, url, avatar, description: String(raw.description || '').trim().slice(0,240)};
+      name, url, avatar, description: String(raw.description || '').trim().slice(0,240),
+      categories: Array.isArray(raw.categories) ? [...new Set(raw.categories.map(String))].slice(0,16) : []};
   }
   function normalize(items) {
     if (!Array.isArray(items)) return [];
@@ -91,6 +93,7 @@
       avatar(item,'') +
       '<strong class="neighbor-name">' + esc(item.name) + '</strong>' +
       '<span class="neighbor-platform">' + esc(platform(item.url)) + '</span>' +
+      ((item.categories||[]).length ? '<div class="neighbor-topics">' + item.categories.filter(id=>Cats.find('neighbors',id)).slice(0,3).map(id=>'<span>'+esc(Cats.breadcrumb('neighbors',id))+'</span>').join('')+'</div>' : '') +
       (item.description ? '<span class="neighbor-desc">' + esc(item.description) + '</span>' : '') +
       '<span class="neighbor-visit">블로그 방문 ↗</span></a>' +
       '<div class="neighbor-card-tools">' +
@@ -100,7 +103,8 @@
   }
   function gridHtml() {
     const visible = entries.filter(item => (filter === '전체' || platform(item.url) === filter) &&
-      (!query || [item.name, item.description, platform(item.url)].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+      Cats.neighborsMatch(item.categories,topicFilter) &&
+      (!query || [item.name, item.description, platform(item.url),...(item.categories||[]).map(id=>Cats.breadcrumb('neighbors',id))].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase())));
     if (!visible.length) {
       return '<div class="neighbor-empty"><span aria-hidden="true">✧</span><strong>' +
         (entries.length ? '조건에 맞는 이웃이 없습니다' : '아직 등록된 이웃 블로그가 없습니다') +
@@ -122,7 +126,9 @@
       '<label>블로그 주소 <input required name="url" type="url" placeholder="https://blog.naver.com/..." value="' + esc(current?.url || '') + '" /></label>' +
       '<label>한 줄 소개 (선택) <input name="description" maxlength="240" placeholder="어떤 글을 쓰는 블로그인가요?" value="' + esc(current?.description || '') + '" /></label>' +
       '<label>프로필 사진 URL (선택) <input name="avatar" type="url" placeholder="https://.../photo.jpg" value="' + esc(current?.avatar || '') + '" /></label>' +
-      '</div><div class="neighbor-form-actions">' +
+      '</div><fieldset class="neighbor-topic-fieldset"><legend>주제 카테고리 (복수 선택 가능)</legend><p><a href="#/categories">카테고리 추가·수정 ↗</a></p><div class="neighbor-topic-choices">' +
+      Cats.ordered('neighbors').map(x=>'<label style="--category-depth:'+Math.min(x.depth,10)+'"><input type="checkbox" name="categories" value="'+esc(x.id)+'" '+(current?.categories?.includes(x.id)?'checked':'')+' /> '+esc(x.name)+'</label>').join('') +
+      '</div></fieldset><div class="neighbor-form-actions">' +
       '<button class="btn" type="submit">' + (current ? '이웃 수정' : '+ 이웃 추가') + '</button>' +
       (current ? '<button class="btn btn-outline" type="button" id="neighborCancelEdit">수정 취소</button>' : '') +
       '</div></form>';
@@ -138,6 +144,8 @@
       '<button class="btn btn-outline" type="button" id="neighborOpenManager">+ 이웃 등록·관리</button></div>' +
       (hasDraft ? '<p class="neighbor-draft-warning">현재 보이는 목록에 이 브라우저의 미공개 변경사항이 포함되어 있습니다. 다른 방문자에게 보여 주려면 아래에서 GitHub에 게시하세요.</p>' : '') +
       '<div class="neighbor-toolbar"><div class="filter-chips" id="neighborFilters">' + filtersHtml() + '</div>' +
+      '<label class="neighbor-topic-filter">주제별 보기 <select id="neighborTopicFilter"><option value="전체">모든 주제</option>'+
+      Cats.options('neighbors',topicFilter)+'</select></label>' +
       '<input id="neighborSearch" class="neighbor-search" type="search" placeholder="이웃 이름·소개 검색" aria-label="이웃 검색" value="' + esc(query) + '" /></div>' +
       '<div id="neighborCards">' + gridHtml() + '</div>' +
       '<details class="neighbor-manager" id="neighborManager" ' + (managerOpen ? 'open' : '') + '>' +
@@ -182,6 +190,7 @@
       manager.open = true; managerOpen = true;
       manager.scrollIntoView({behavior:'smooth',block:'start'});
     });
+    root.querySelector('#neighborTopicFilter')?.addEventListener('change',event=>{topicFilter=event.target.value;root.querySelector('#neighborCards').innerHTML=gridHtml();});
     root.querySelector('#neighborSearch')?.addEventListener('input', event => {
       query = event.target.value;
       root.querySelector('#neighborCards').innerHTML = gridHtml();
@@ -221,7 +230,7 @@
       if (event.target.closest('#neighborReset')) {
         if (!confirm('이 브라우저에서 편집한 이웃 목록을 버리고 GitHub 공개 목록으로 돌아갈까요?')) return;
         localStorage.removeItem(DRAFT_KEY);
-        entries = published.slice(); hasDraft = false; editingId=null; filter='전체'; query='';
+        entries = published.slice(); hasDraft = false; editingId=null; filter='전체'; topicFilter='전체'; query='';
         refresh(); flash('GitHub 공개 이웃 목록으로 되돌렸습니다.');
       }
     });
@@ -234,10 +243,11 @@
       if (avatarUrl && !safeUrl(avatarUrl)) {flash('프로필 이미지 URL을 확인해 주세요.');return;}
       if (entries.some(x => x.url === url && x.id !== editingId)) {flash('이미 등록된 블로그 주소입니다.');return;}
       const item = {id: editingId || 'n-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-        name: name.slice(0,80), url, avatar:safeUrl(avatarUrl), description:String(data.get('description')||'').trim().slice(0,240)};
+        name: name.slice(0,80), url, avatar:safeUrl(avatarUrl), description:String(data.get('description')||'').trim().slice(0,240),
+        categories:[...new Set(data.getAll('categories').map(String).filter(id=>Cats.find('neighbors',id)))].slice(0,16)};
       if (editingId) entries = entries.map(x => x.id===editingId ? item : x);
       else entries.push(item);
-      editingId=null; managerOpen=true; filter='전체'; query='';
+      editingId=null; managerOpen=true; filter='전체'; topicFilter='전체'; query='';
       saveDraft();refresh();
       flash('이웃을 저장했습니다. 전체 공개하려면 GitHub에 목록을 게시해 주세요.');
     });
@@ -246,5 +256,9 @@
       if (event.target?.matches('.neighbor-avatar img')) event.target.remove();
     }, true);
   }
-  window.LIBERNeighbors = {render, setup, homePreview};
+  function reassignCategory(id,parentId){
+    entries=entries.map(item=>({...item,categories:[...new Set((item.categories||[]).map(value=>value===id?parentId:value).filter(Boolean))]}));
+    saveDraft();
+  }
+  window.LIBERNeighbors = {render, setup, homePreview,reassignCategory};
 })();
