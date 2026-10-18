@@ -141,12 +141,23 @@ async function home() {
  <section class="feature-section"><div class="container"><div class="feature-inner"><div class="feature-art"><span>LIBER</span></div><div class="feature-copy"><div class="eyebrow">ABOUT THE ARCHIVE</div><h2>하나의 주제에<br>머물지 않는 공간</h2><p>철학과 역사, 사소한 일상의 발견까지. 이곳에는 다양한 이야기들이 차곡차곡 쌓입니다.</p><a href="#/about" class="plain-link">블로그에 관하여 →</a></div></div></div></section>`;
 }
 function emptyPosts() { return `<div class="empty-state"><span class="empty-icon">✧</span><strong>아직 기록이 없습니다</strong><p>새로운 글을 작성해서 첫 이야기를 남겨 보세요.</p><a href="#/write" class="btn btn-sm">첫 글 쓰기</a></div>`; }
-async function postsPage() {
+async function postsPage(){
  const rows = await allPosts(false);
- const cats=Cats.filterButtons('posts',activeCategory);
- const q=searchQuery.trim().toLocaleLowerCase();
- const filtered=rows.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),Cats.postName(p),...(p.tags||[])].join(' ').toLocaleLowerCase().includes(q)));
- return `${banner('THE JOURNAL','기록의 서가','주제에 얽매이지 않는 생각과 이야기들을 모았습니다.')}<section class="content-section"><div class="container"><div class="filter-bar"><div class="filter-chips" role="group" aria-label="카테고리 선택">${cats}</div><input type="search" class="search-input" id="postSearch" placeholder="제목 또는 내용 검색" aria-label="게시글 검색" value="${escapeHTML(searchQuery)}" /></div><div class="post-result-label">검색 결과 <strong>${filtered.length}</strong>개의 글</div><div id="postResults">${filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`}</div></div></section>`;
+ const q = searchQuery.trim().toLocaleLowerCase();
+ const filtered = rows.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),Cats.postName(p),...(p.tags||[])].join(' ').toLocaleLowerCase().includes(q)));
+ const heading = activeCategory === '전체' ? '모든 기록' : Cats.breadcrumb('posts',activeCategory)||'모든 기록';
+ return `${banner('THE JOURNAL','기록의 서가','주제에 얽매이지 않는 생각과 이야기들을 모았습니다.')}
+ <section class="content-section journal-section"><div class="container">
+ <div class="journal-layout">
+ ${window.LIBERJournalSidebar.render(rows,activeCategory)}
+ <div class="journal-main">
+ <div class="journal-results-head">
+ <div><div class="eyebrow">COLLECTED STORIES</div><h2>${escapeHTML(heading)}</h2></div>
+ <input type="search" class="search-input" id="postSearch" placeholder="제목 또는 내용 검색" aria-label="게시글 검색" value="${escapeHTML(searchQuery)}" />
+ </div>
+ <div class="post-result-label" aria-live="polite">검색 결과 <strong>${filtered.length}</strong>개의 글</div>
+ <div id="postResults">${filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`}</div>
+ </div></div></div></section>`;
 }
 function parseYouTube(url) { try { const u = new URL(url); let id = '';
  if (u.hostname==='youtu.be'||u.hostname==='www.youtu.be') id = u.pathname.split('/')[1]||'';
@@ -219,7 +230,7 @@ async function render() {
  $('#copyrightYear').textContent = new Date().getFullYear();
  if(route==='write') setupEditor();
  if(route==='settings') setupSettings();
- if(route==='posts') setupSearch();
+ if(route==='posts') {setupSearch();window.LIBERJournalSidebar.setup();}
  if(route==='neighbors') window.LIBERNeighbors.setup();
  if(route==='categories') Cats.setup();
 }
