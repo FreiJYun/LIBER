@@ -189,3 +189,15 @@ a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}button,input,se
  .journal-section .journal-main .post-grid{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.journal-cat-row,.journal-mobile-chevron{transition:none}}
+
+
+/* Category sort controls: jump to top/bottom and drag among siblings. */
+.category-drag-hint{margin:17px 0 2px;color:var(--muted);font-size:12px;line-height:1.65}
+.category-tree-row[draggable="true"]{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:pan-y}
+.category-tree-row.dragging{opacity:.42;cursor:grabbing}
+.category-tree-row.drag-before{box-shadow:inset 0 3px var(--accent);background:var(--paper-soft)}
+.category-tree-row.drag-after{box-shadow:inset 0 -3px var(--accent);background:var(--paper-soft)}
+.category-tree-drag-mark{font-size:16px;line-height:1;color:var(--subtle);margin-right:3px;flex:none}
+.category-tree-row:hover .category-tree-drag-mark{color:var(--accent)}
+.category-actions .btn{min-height:38px}
+@media(max-width:740px){.category-drag-hint{font-size:11px}.category-tree-row{touch-action:pan-y}}
