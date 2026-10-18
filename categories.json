@@ -1,0 +1,84 @@
+{
+  "posts": [
+    {
+      "id": "p-philosophy",
+      "name": "철학",
+      "parentId": null,
+      "order": 0
+    },
+    {
+      "id": "p-ethics",
+      "name": "윤리학",
+      "parentId": "p-philosophy",
+      "order": 0
+    },
+    {
+      "id": "p-history",
+      "name": "역사",
+      "parentId": null,
+      "order": 1
+    },
+    {
+      "id": "p-rome",
+      "name": "고대 로마",
+      "parentId": "p-history",
+      "order": 0
+    },
+    {
+      "id": "p-reading",
+      "name": "독서",
+      "parentId": null,
+      "order": 2
+    },
+    {
+      "id": "p-technology",
+      "name": "기술",
+      "parentId": null,
+      "order": 3
+    },
+    {
+      "id": "p-life",
+      "name": "일상",
+      "parentId": null,
+      "order": 4
+    },
+    {
+      "id": "p-other",
+      "name": "기타",
+      "parentId": null,
+      "order": 5
+    }
+  ],
+  "neighbors": [
+    {
+      "id": "n-philosophy",
+      "name": "철학",
+      "parentId": null,
+      "order": 0
+    },
+    {
+      "id": "n-history",
+      "name": "역사",
+      "parentId": null,
+      "order": 1
+    },
+    {
+      "id": "n-life",
+      "name": "일상",
+      "parentId": null,
+      "order": 2
+    },
+    {
+      "id": "n-technology",
+      "name": "학술·기술",
+      "parentId": null,
+      "order": 3
+    },
+    {
+      "id": "n-other",
+      "name": "기타",
+      "parentId": null,
+      "order": 4
+    }
+  ]
+}
