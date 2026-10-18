@@ -4,6 +4,7 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const app = $('#app');
+const Cats = window.LIBERCategories;
 const DB_NAME = 'liber_personal_blog_v1';
 const SETTINGS_KEY = 'liber_blog_preferences_v1';
 const SEED_KEY = 'liber_blog_seeded_v1';
@@ -128,7 +129,7 @@ function thumb(post) {
   return `<div class="post-image pattern-${categoryClass(post.category)}"><span class="art-glyph" aria-hidden="true">${categoryGlyph(post.category)}</span></div>`;
 }
 function card(post) {
-  return `<article class="post-card">${thumb(post)}<div class="post-body"><div class="post-card-top"><span>${escapeHTML(post.category||'기타')}</span><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time>${post.demo?'<span class="demo-tag">예시</span>':''}</div><h3><a href="#/post/${encodeURIComponent(post.id)}">${escapeHTML(post.title)}</a></h3><p>${escapeHTML(crop(post.subtitle||txt(post.body),103))}</p><div class="post-card-bottom"><span>약 ${readTime(post)}분 읽기</span><a href="#/post/${encodeURIComponent(post.id)}">자세히 읽기 →</a></div></div></article>`;
+  return `<article class="post-card">${thumb(post)}<div class="post-body"><div class="post-card-top"><span>${escapeHTML(Cats.postName(post))}</span><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time>${post.demo?'<span class="demo-tag">예시</span>':''}</div><h3><a href="#/post/${encodeURIComponent(post.id)}">${escapeHTML(post.title)}</a></h3><p>${escapeHTML(crop(post.subtitle||txt(post.body),103))}</p><div class="post-card-bottom"><span>약 ${readTime(post)}분 읽기</span><a href="#/post/${encodeURIComponent(post.id)}">자세히 읽기 →</a></div></div></article>`;
 }
 const temple = `<svg class="temple-svg" viewBox="0 0 650 570" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="templeStone" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f4d7a8" stop-opacity=".63"/><stop offset="1" stop-color="#d8a873" stop-opacity=".3"/></linearGradient><pattern id="stoneLines" width="34" height="12" patternUnits="userSpaceOnUse"><path d="M0 11H34" stroke="#fff7dd" opacity=".13"/></pattern></defs><g fill="url(#templeStone)" stroke="#f4e0b8" stroke-opacity=".46" stroke-width="2"><path d="M52 207L325 70 599 207v23H52z"/><path d="M85 230h480v30H85z"/><path d="M93 267h464v20H93z"/><rect x="106" y="286" width="47" height="207"/><rect x="197" y="286" width="47" height="207"/><rect x="288" y="286" width="47" height="207"/><rect x="379" y="286" width="47" height="207"/><rect x="470" y="286" width="47" height="207"/><path d="M69 492h512v31H69z"/><path d="M42 524h566v23H42z"/><path d="M26 547h598v20H26z"/></g><g fill="none" stroke="#ffe5b7" opacity=".24"><path d="M115 300v182m15-182v182m76-182v182m15-182v182m76-182v182m15-182v182m76-182v182m15-182v182m76-182v182m15-182v182" stroke-width="3"/><path d="M164 194l160-81 161 81H164z"/><circle cx="325" cy="167" r="23"/></g><path d="M0 567H650" stroke="#fff7df" opacity=".35" stroke-width="5"/><rect x="26" y="211" width="598" height="356" fill="url(#stoneLines)" opacity=".2"/></svg>`;
 function banner(eyebrow,title,desc) { return `<section class="page-banner"><div class="container"><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${desc}</p></div></section>`; }
@@ -142,10 +143,10 @@ async function home() {
 function emptyPosts() { return `<div class="empty-state"><span class="empty-icon">✧</span><strong>아직 기록이 없습니다</strong><p>새로운 글을 작성해서 첫 이야기를 남겨 보세요.</p><a href="#/write" class="btn btn-sm">첫 글 쓰기</a></div>`; }
 async function postsPage() {
  const rows = await allPosts(false);
- const cats=['전체',...new Set([...['철학','역사','일상','독서','기술'],...rows.map(x=>x.category||'기타')])];
+ const cats=Cats.filterButtons('posts',activeCategory);
  const q=searchQuery.trim().toLocaleLowerCase();
- const filtered=rows.filter(p=>(activeCategory==='전체'||p.category===activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
- return `${banner('THE JOURNAL','기록의 서가','주제에 얽매이지 않는 생각과 이야기들을 모았습니다.')}<section class="content-section"><div class="container"><div class="filter-bar"><div class="filter-chips" role="group" aria-label="카테고리 선택">${cats.map(c=>`<button type="button" class="filter-chip ${c===activeCategory?'active':''}" data-category="${escapeHTML(c)}">${escapeHTML(c)}</button>`).join('')}</div><input type="search" class="search-input" id="postSearch" placeholder="제목 또는 내용 검색" aria-label="게시글 검색" value="${escapeHTML(searchQuery)}" /></div><div class="post-result-label">검색 결과 <strong>${filtered.length}</strong>개의 글</div><div id="postResults">${filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`}</div></div></section>`;
+ const filtered=rows.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
+ return `${banner('THE JOURNAL','기록의 서가','주제에 얽매이지 않는 생각과 이야기들을 모았습니다.')}<section class="content-section"><div class="container"><div class="filter-bar"><div class="filter-chips" role="group" aria-label="카테고리 선택">${cats}</div><input type="search" class="search-input" id="postSearch" placeholder="제목 또는 내용 검색" aria-label="게시글 검색" value="${escapeHTML(searchQuery)}" /></div><div class="post-result-label">검색 결과 <strong>${filtered.length}</strong>개의 글</div><div id="postResults">${filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`}</div></div></section>`;
 }
 function parseYouTube(url) { try { const u = new URL(url); let id = '';
  if (u.hostname==='youtu.be'||u.hostname==='www.youtu.be') id = u.pathname.split('/')[1]||'';
@@ -180,16 +181,16 @@ async function articlePage(id) {
  const post = await getPost(id);
  if(!post) return `${banner('THE JOURNAL','글을 찾을 수 없습니다','주소가 변경되었거나 삭제된 글입니다.')}<div class="container content-section"><a class="btn" href="#/posts">글 목록으로</a></div>`;
  const cover=(post.attachments||[]).find(a=>(a.type||'').startsWith('image/')&&a.blob);
- return `<article class="article-shell"><nav class="crumb" aria-label="현재 위치"><a href="#/home">HOME</a> / <a href="#/posts">JOURNAL</a> / ${escapeHTML(post.category||'기타')}</nav><header class="article-header"><div class="article-labels"><span>${escapeHTML(post.category||'기타')}</span>${post.demo?'<span class="demo-tag">예시 글</span>':''}${post.published===false?'<span class="demo-tag">임시저장</span>':''}</div><h1>${escapeHTML(post.title)}</h1>${post.subtitle?`<p class="article-subtitle">${escapeHTML(post.subtitle)}</p>`:''}<div class="article-meta"><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time><span>약 ${readTime(post)}분 읽기</span>${post.updatedAt?`<span>수정 ${dateText(post.updatedAt)}</span>`:''}</div></header>${cover?`<div class="article-cover"><img src="${objectURL(cover.blob)}" alt="${escapeHTML(post.title)}" /></div>`:''}<div class="article-body">${sanitizeHTML(post.body)}</div>${mediaSection(post,!!cover)}<div class="article-actions"><a href="#/posts" class="btn btn-outline btn-sm">← 모든 글 보기</a><div class="btn-row"><a href="#/write/${encodeURIComponent(post.id)}" class="btn btn-quiet btn-sm">이 글 수정</a><button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(post.id)}">글 삭제</button></div></div><div class="article-end">✦</div></article>`;
+ return `<article class="article-shell"><nav class="crumb" aria-label="현재 위치"><a href="#/home">HOME</a> / <a href="#/posts">JOURNAL</a> / ${escapeHTML(Cats.postName(post))}</nav><header class="article-header"><div class="article-labels"><span>${escapeHTML(Cats.postName(post))}</span>${post.demo?'<span class="demo-tag">예시 글</span>':''}${post.published===false?'<span class="demo-tag">임시저장</span>':''}</div><h1>${escapeHTML(post.title)}</h1>${post.subtitle?`<p class="article-subtitle">${escapeHTML(post.subtitle)}</p>`:''}${post.tags?.length?`<div class="article-tags">${post.tags.map(t=>`<span>#${escapeHTML(t)}</span>`).join('')}</div>`:''}<div class="article-meta"><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time><span>약 ${readTime(post)}분 읽기</span>${post.updatedAt?`<span>수정 ${dateText(post.updatedAt)}</span>`:''}</div></header>${cover?`<div class="article-cover"><img src="${objectURL(cover.blob)}" alt="${escapeHTML(post.title)}" /></div>`:''}<div class="article-body">${sanitizeHTML(post.body)}</div>${mediaSection(post,!!cover)}<div class="article-actions"><a href="#/posts" class="btn btn-outline btn-sm">← 모든 글 보기</a><div class="btn-row"><a href="#/write/${encodeURIComponent(post.id)}" class="btn btn-quiet btn-sm">이 글 수정</a><button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(post.id)}">글 삭제</button></div></div><div class="article-end">✦</div></article>`;
 }
-function categoryOptions(current) { return [...new Set(['철학','역사','일상','독서','기술','기타',current].filter(Boolean))].map(c=>`<option value="${escapeHTML(c)}" ${current===c?'selected':''}>${escapeHTML(c)}</option>`).join(''); }
+function categoryOptions(current) { return Cats.options('posts',Cats.postId(current || {category:'일상'})); }
 async function editorPage(id) {
  editorId=id||null;
  const post=editorId?await getPost(editorId):null;
  if(editorId&&!post) return `${banner('EDITOR','게시글을 찾을 수 없습니다','새 게시글을 작성해 주세요.')}<div class="container content-section"><a class="btn" href="#/write">새 글쓰기</a></div>`;
  editorFiles=(post?.attachments||[]).map(a=>({...a}));
  const drafts=(await allPosts()).filter(p=>p.published===false);
- return `${banner('WRITE YOUR STORY',post?'글 수정하기':'새로운 기록','지금의 생각을 자유롭게 적어 보세요.')}<section class="content-section"><div class="container editor-grid"><div><div class="panel"><div class="field"><label for="editTitle">게시글 제목</label><input type="text" id="editTitle" maxlength="160" placeholder="어떤 이야기를 남기실 건가요?" value="${escapeHTML(post?.title||'')}" required /></div><div class="field"><label for="editSubtitle">짧은 소개 (선택)</label><input type="text" id="editSubtitle" maxlength="250" placeholder="게시글 목록에 표시될 한 문장" value="${escapeHTML(post?.subtitle||'')}" /></div><div class="field"><span class="field-title">본문</span><div class="editor-toolbar" role="toolbar" aria-label="서식 편집 도구"><button type="button" class="tool-btn" data-command="bold" title="굵게"><b>B</b></button><button type="button" class="tool-btn" data-command="italic" title="기울임"><i>I</i></button><button type="button" class="tool-btn" data-command="underline" title="밑줄"><u>U</u></button><span class="tool-sep"></span><button type="button" class="tool-btn" data-block="p" title="본문">본문</button><button type="button" class="tool-btn" data-block="h2" title="큰 제목">H2</button><button type="button" class="tool-btn" data-block="h3" title="작은 제목">H3</button><span class="tool-sep"></span><button type="button" class="tool-btn" data-command="insertUnorderedList" title="글머리 기호">☷</button><button type="button" class="tool-btn" data-command="insertOrderedList" title="번호 목록">①</button><button type="button" class="tool-btn" data-block="blockquote" title="인용문">❝</button><button type="button" class="tool-btn" data-command="createLink" title="링크 삽입">↗</button><button type="button" class="tool-btn" data-command="removeFormat" title="서식 제거">Tx</button></div><div class="rich-editor" id="richEditor" contenteditable="true" role="textbox" aria-label="게시글 본문" aria-multiline="true" data-placeholder="이야기를 시작하세요...">${sanitizeHTML(post?.body||'')}</div><p class="field-help">글을 선택한 뒤 위쪽 도구로 서식을 적용할 수 있습니다. 한글은 어절 단위로 줄바꿈하도록 설정했습니다.</p></div></div><div class="editor-action-row"><a href="${post?`#/post/${encodeURIComponent(post.id)}`:'#/posts'}" class="btn btn-outline">← 돌아가기</a><div class="btn-row"><button id="saveDraft" type="button" class="btn btn-quiet">임시저장</button><button id="publishPost" type="button" class="btn">${post?.published===false||!post?'게시하기':'변경사항 저장'} →</button></div></div><p class="draft-msg" id="editorMessage">※ 글과 첨부 파일은 현재 브라우저에만 저장됩니다. 다른 기기에 자동으로 동기화되지 않습니다.</p></div><aside><div class="panel"><h3>글 설정</h3><div class="field"><label for="editCategory">카테고리</label><select id="editCategory">${categoryOptions(post?.category||'일상')}</select><p class="field-help">새 카테고리를 만들고 싶으면 아래 입력란을 사용하세요.</p><input type="text" id="newCategory" maxlength="40" placeholder="새 카테고리 (선택)" /></div><div class="field"><span class="field-title">사진·동영상 첨부</span><div class="upload-zone"><strong>＋ 파일 선택</strong><p>사진 또는 동영상 여러 개 첨부 가능</p><input type="file" id="mediaUpload" accept="image/*,video/*" multiple aria-label="사진 또는 동영상 업로드" /></div><div class="upload-list" id="uploadList"></div><p class="field-help">첨부한 미디어는 게시글 하단에 순서대로 표시됩니다. 큰 동영상은 저장 공간에 제한이 있을 수 있습니다.</p></div><div class="field"><label for="editLinks">동영상·유튜브 링크</label><textarea id="editLinks" rows="4" placeholder="https://youtu.be/...\n링크를 한 줄에 하나씩 입력">${escapeHTML((post?.links||[]).join('\n'))}</textarea></div></div><div class="side-help">✦ <strong>로컬 블로그 안내</strong><br>이 버전에서는 작성하신 글이 방문자에게 공유되지 않습니다. 공개 운영 전에 로그인·DB 연동을 추가해야 합니다.</div>${drafts.length?`<div class="side-help"><strong>임시저장 글 (${drafts.length})</strong><br>${drafts.slice(0,5).map(d=>`<a href="#/write/${encodeURIComponent(d.id)}">↳ ${escapeHTML(crop(d.title||'제목 없음',24))}</a>`).join('<br>')}</div>`:''}</aside></div></section>`;
+ return `${banner('WRITE YOUR STORY',post?'글 수정하기':'새로운 기록','지금의 생각을 자유롭게 적어 보세요.')}<section class="content-section"><div class="container editor-grid"><div><div class="panel"><div class="field"><label for="editTitle">게시글 제목</label><input type="text" id="editTitle" maxlength="160" placeholder="어떤 이야기를 남기실 건가요?" value="${escapeHTML(post?.title||'')}" required /></div><div class="field"><label for="editSubtitle">짧은 소개 (선택)</label><input type="text" id="editSubtitle" maxlength="250" placeholder="게시글 목록에 표시될 한 문장" value="${escapeHTML(post?.subtitle||'')}" /></div><div class="field"><span class="field-title">본문</span><div class="editor-toolbar" role="toolbar" aria-label="서식 편집 도구"><button type="button" class="tool-btn" data-command="bold" title="굵게"><b>B</b></button><button type="button" class="tool-btn" data-command="italic" title="기울임"><i>I</i></button><button type="button" class="tool-btn" data-command="underline" title="밑줄"><u>U</u></button><span class="tool-sep"></span><button type="button" class="tool-btn" data-block="p" title="본문">본문</button><button type="button" class="tool-btn" data-block="h2" title="큰 제목">H2</button><button type="button" class="tool-btn" data-block="h3" title="작은 제목">H3</button><span class="tool-sep"></span><button type="button" class="tool-btn" data-command="insertUnorderedList" title="글머리 기호">☷</button><button type="button" class="tool-btn" data-command="insertOrderedList" title="번호 목록">①</button><button type="button" class="tool-btn" data-block="blockquote" title="인용문">❝</button><button type="button" class="tool-btn" data-command="createLink" title="링크 삽입">↗</button><button type="button" class="tool-btn" data-command="removeFormat" title="서식 제거">Tx</button></div><div class="rich-editor" id="richEditor" contenteditable="true" role="textbox" aria-label="게시글 본문" aria-multiline="true" data-placeholder="이야기를 시작하세요...">${sanitizeHTML(post?.body||'')}</div><p class="field-help">글을 선택한 뒤 위쪽 도구로 서식을 적용할 수 있습니다. 한글은 어절 단위로 줄바꿈하도록 설정했습니다.</p></div></div><div class="editor-action-row"><a href="${post?`#/post/${encodeURIComponent(post.id)}`:'#/posts'}" class="btn btn-outline">← 돌아가기</a><div class="btn-row"><button id="saveDraft" type="button" class="btn btn-quiet">임시저장</button><button id="publishPost" type="button" class="btn">${post?.published===false||!post?'게시하기':'변경사항 저장'} →</button></div></div><p class="draft-msg" id="editorMessage">※ 글과 첨부 파일은 현재 브라우저에만 저장됩니다. 다른 기기에 자동으로 동기화되지 않습니다.</p></div><aside><div class="panel"><h3>글 설정</h3><div class="field"><label for="editCategory">카테고리</label><select id="editCategory">${categoryOptions(post)}</select><p class="field-help">선택한 카테고리의 하위 분류를 빠르게 추가하거나 <a href="#/categories">카테고리 관리</a>에서 트리를 편집하세요.</p><input type="text" id="newCategory" maxlength="40" placeholder="새 하위 카테고리 이름 (선택)" /></div><div class="field"><label for="editTags">태그 (쉼표로 구분, 최대 8개)</label><input type="text" id="editTags" maxlength="240" placeholder="예: 역사, 독서노트" value="${escapeHTML((post?.tags||[]).join(', '))}" /></div><div class="field"><span class="field-title">사진·동영상 첨부</span><div class="upload-zone"><strong>＋ 파일 선택</strong><p>사진 또는 동영상 여러 개 첨부 가능</p><input type="file" id="mediaUpload" accept="image/*,video/*" multiple aria-label="사진 또는 동영상 업로드" /></div><div class="upload-list" id="uploadList"></div><p class="field-help">첨부한 미디어는 게시글 하단에 순서대로 표시됩니다. 큰 동영상은 저장 공간에 제한이 있을 수 있습니다.</p></div><div class="field"><label for="editLinks">동영상·유튜브 링크</label><textarea id="editLinks" rows="4" placeholder="https://youtu.be/...\n링크를 한 줄에 하나씩 입력">${escapeHTML((post?.links||[]).join('\n'))}</textarea></div></div><div class="side-help">✦ <strong>로컬 블로그 안내</strong><br>이 버전에서는 작성하신 글이 방문자에게 공유되지 않습니다. 공개 운영 전에 로그인·DB 연동을 추가해야 합니다.</div>${drafts.length?`<div class="side-help"><strong>임시저장 글 (${drafts.length})</strong><br>${drafts.slice(0,5).map(d=>`<a href="#/write/${encodeURIComponent(d.id)}">↳ ${escapeHTML(crop(d.title||'제목 없음',24))}</a>`).join('<br>')}</div>`:''}</aside></div></section>`;
 }
 function aboutPage() { return `${banner('THE PERSON BEHIND THE PAGES','이 공간에 대하여','누구의 무엇을 위한 기록인지 소개합니다.')}<div class="container about-layout"><div><div class="eyebrow">NICE TO MEET YOU</div><h2>한 편의 글에서 시작되는<br>새로운 대화와 발견.</h2><span class="line-gold"></span><p>${escapeHTML(config.about||defaults.about)}</p><div class="btn-row"><a href="#/posts" class="btn">기록 둘러보기 →</a><a href="#/settings" class="btn btn-outline">소개글 수정</a></div></div><div class="about-decoration"><strong>✦</strong></div></div>`; }
 function galleryPage() { return `${banner('THE GALLERY','사진첩','사진과 순간을 따로 모아 둘 공간입니다.')}<div class="container"><section class="gallery-await"><div class="symbol">❧</div><div class="eyebrow">COMING LATER</div><h2>사진첩은 준비 중입니다</h2><p>우선 블로그 글에 사진과 동영상을 첨부할 수 있습니다.<br>독립 사진첩은 나중에 확장할 수 있도록 메뉴를 마련했습니다.</p><a href="#/posts" class="btn btn-outline">블로그로 돌아가기 →</a></section></div>`; }
@@ -211,6 +212,7 @@ async function render() {
  else if(route==='about') app.innerHTML=aboutPage();
  else if(route==='gallery') app.innerHTML=galleryPage();
  else if(route==='neighbors') app.innerHTML=await window.LIBERNeighbors.render();
+ else if(route==='categories') app.innerHTML=Cats.page();
  else if(route==='settings') app.innerHTML=settingsPage();
  else app.innerHTML=await home();
  app.classList.remove('is-leaving'); app.classList.remove('page-in'); void app.offsetWidth; app.classList.add('page-in');
@@ -219,6 +221,7 @@ async function render() {
  if(route==='settings') setupSettings();
  if(route==='posts') setupSearch();
  if(route==='neighbors') window.LIBERNeighbors.setup();
+ if(route==='categories') Cats.setup();
 }
 async function pageChange() {
  const seq=++pageSwitchId;
@@ -230,7 +233,7 @@ function showError(e) { console.error(e); app.classList.remove('is-leaving'); ap
 function setupSearch() {
  const input=$('#postSearch'); if(!input) return;
  input.addEventListener('input',async()=>{searchQuery=input.value; const pos=input.selectionStart; const oldY=window.scrollY; const all=await allPosts(false);
-  const q=searchQuery.trim().toLocaleLowerCase(), filtered=all.filter(p=>(activeCategory==='전체'||p.category===activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
+  const q=searchQuery.trim().toLocaleLowerCase(), filtered=all.filter(p=>Cats.postMatches(p,activeCategory)&&(!q||[p.title,p.subtitle,txt(p.body),p.category].join(' ').toLocaleLowerCase().includes(q)));
   clearMediaURLs(); $('#postResults').innerHTML=filtered.length?`<div class="post-grid">${filtered.map(card).join('')}</div>`:`<div class="empty-state"><span class="empty-icon">⌕</span><strong>일치하는 글이 없습니다</strong><p>다른 검색어나 카테고리를 선택해 주세요.</p></div>`;
   $('.post-result-label').innerHTML=`검색 결과 <strong>${filtered.length}</strong>개의 글`; window.scrollTo(0,oldY);
  });
@@ -260,11 +263,20 @@ async function saveEditor(published) {
  const title=$('#editTitle')?.value.trim(); const body=sanitizeHTML($('#richEditor')?.innerHTML||'');
  if(!title) { toast('게시글 제목을 입력해 주세요.'); $('#editTitle')?.focus(); return; }
  if(!txt(body).trim()) { toast('게시글 본문을 입력해 주세요.'); $('#richEditor')?.focus(); return; }
- const newCat=$('#newCategory')?.value.trim(); const cat=newCat||$('#editCategory')?.value||'기타';
- if(cat.length>40) { toast('카테고리 이름은 40자 이하로 입력해 주세요.'); return; }
+ const newCat=$('#newCategory')?.value.trim();
+ let catId=$('#editCategory')?.value || Cats.byName('posts','기타')?.id;
+ if(newCat){
+  if(newCat.length>50){ toast('카테고리 이름은 50자 이하로 입력해 주세요.'); return; }
+  try { catId=Cats.create('posts',newCat,catId||null).id; }
+  catch(e){ toast(e.message); return; }
+ }
+ const catNode=Cats.find('posts',catId);
+ if(!catNode){toast('카테고리를 선택해 주세요.');return;}
+ const cat=catNode.name;
+ const tags=Array.from(new Set(($('#editTags')?.value||'').split(',').map(t=>t.trim().slice(0,30)).filter(Boolean))).slice(0,8);
  const prev=editorId?await getPost(editorId):null;
  const links=($('#editLinks')?.value||'').split(/\n/).map(x=>x.trim()).filter(Boolean).filter(x=>{try {const u=new URL(x);return ['http:','https:'].includes(u.protocol);}catch{return false;}}).slice(0,20);
- const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
+ const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
  const buttons=[$('#saveDraft'),$('#publishPost')]; buttons.forEach(b=>{if(b)b.disabled=true;});
  try { await putPost(post); editorId=post.id; toast(published?'게시글을 저장했습니다.':'임시저장했습니다.'); location.hash=published?`#/post/${encodeURIComponent(post.id)}`:`#/write/${encodeURIComponent(post.id)}`; if(!published && location.hash===`#/write/${encodeURIComponent(post.id)}`) await render(); }
  catch(err) {console.error(err);toast('저장 실패: 브라우저 저장 용량을 확인해 주세요.');}
@@ -335,13 +347,18 @@ async function importBackup(e) {
 }
 async function boot() {
  $('#copyrightYear').textContent=new Date().getFullYear();
- try { db=await getDB();await ensureSeed();await applyConfig();await render(); }
+ try { db=await getDB();await Cats.load();await ensureSeed();await applyConfig();await render(); }
  catch(err){showError(err);}
  window.addEventListener('hashchange',pageChange);
  $('#mobileMenu').addEventListener('click',()=>{const nav=$('#mainNav');const open=nav.classList.toggle('open');$('#mobileMenu').setAttribute('aria-expanded',String(open));});
  app.addEventListener('mousedown',e=>{if(e.target.closest('.editor-toolbar .tool-btn'))e.preventDefault();});
  app.addEventListener('click',handleClick);
  $('#backupFile').addEventListener('change',importBackup);
+ window.LIBERCategoryUsage = async (kind,id,parentId) => {
+  if(kind==='neighbors'){window.LIBERNeighbors.reassignCategory?.(id,parentId);return;}
+  const target=Cats.find('posts',parentId)||Cats.byName('posts','기타');
+  for(const post of await allPosts()) if(Cats.postId(post)===id){post.categoryId=target?.id||'';post.category=target?.name||'기타';await putPost(post);}
+ };
 }
 boot();
 })();
