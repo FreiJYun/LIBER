@@ -33,3 +33,54 @@ a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}button,input,se
 @media(max-width:740px){.container{padding:0 20px}.header-inner{height:72px;padding:0 20px;gap:12px}.brand-mark{width:35px;height:35px}.brand-copy strong{font-size:20px}.brand-copy small{font-size:7px}.mobile-menu{display:block;order:3;margin-left:0;padding:6px}.main-nav{display:none;position:absolute;top:72px;left:0;right:0;background:var(--paper);border-bottom:1px solid var(--border);padding:18px 20px 22px;box-shadow:var(--shadow);margin:0;flex-direction:column;align-items:flex-start;gap:19px}.main-nav.open{display:flex}.main-nav a.active::after{display:none}.header-actions{margin-left:auto;gap:12px}.header-write{padding:9px 11px;font-size:11px}.header-write .plus-icon{display:none}.icon-link svg{width:18px}.hero,.hero-inner{min-height:520px}.hero-inner{padding:56px 23px;display:block}.hero-copy{max-width:560px}.hero-copy h1{font-size:clamp(33px,8vw,45px)}.hero-copy p{max-width:490px}.hero-art{height:90%;width:88%;right:-22%;opacity:.24}.hero:after{inset:10px}.hero-footnote{left:23px;bottom:27px}.hero-side-number{right:30px}.intro-strip-inner{grid-template-columns:1fr 1fr}.intro-stat{padding:20px 12px}.intro-stat:first-child{padding-left:0}.intro-stat:nth-child(2){border:0}.intro-quote{grid-column:1/-1;border-top:1px solid var(--border);padding:14px 0 18px}.section-pad{padding:55px 0}.section-head h2{font-size:27px}.post-grid{gap:14px}.post-body{padding:19px 17px}.post-card h3{font-size:17px}.post-card p{font-size:12px}.feature-inner{grid-template-columns:1fr}.feature-art{min-height:220px}.feature-copy{padding:32px}.page-banner{padding:50px 0 39px}.content-section{padding:35px 0 80px}.editor-grid,.settings-layout,.about-layout{grid-template-columns:1fr}.settings-nav{position:static;display:flex;flex-wrap:wrap}.settings-nav a{border:1px solid var(--border);padding:9px 11px}.settings-nav a.active{border:1px solid var(--accent)}.settings-panel{padding:22px}.about-layout{gap:32px;padding:55px 0 70px}.about-decoration{min-height:260px}.about-layout h2{font-size:29px}.footer-inner{padding:34px 20px 21px;grid-template-columns:1fr}.footer-links{padding:0}.article-shell{padding:44px 20px 80px}.article-body{padding-top:25px}}
 @media(max-width:480px){.post-grid{grid-template-columns:1fr}.post-image{aspect-ratio:1.9}.hero-kicker{font-size:10px}.hero-buttons{gap:8px}.hero-btn{padding:12px 15px;font-size:11px}.header-write{padding:9px}.brand-copy small{letter-spacing:.12em}.filter-bar{align-items:stretch}.search-input{width:100%}.theme-options{grid-template-columns:1fr}.theme-swatch{aspect-ratio:5}.settings-row{flex-direction:column;align-items:flex-start}.range-input{width:100%}.article-header h1{font-size:30px}.article-actions .btn{width:100%}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* External blogroll — LIBER neighbors */
+.neighbor-intro{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:30px}
+.neighbor-intro h2{font-size:clamp(26px,3vw,36px);font-weight:750;letter-spacing:-.04em;margin:10px 0}
+.neighbor-intro p{color:var(--muted);line-height:1.8;margin:0}
+.neighbor-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;margin-bottom:28px}
+.neighbor-search{font:inherit;border:1px solid var(--border);background:var(--paper);color:var(--ink);padding:12px 16px;border-radius:12px;width:min(100%,290px);outline-offset:2px}
+.neighbors-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.neighbor-card{background:var(--paper);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.neighbor-card:hover{transform:translateY(-4px);border-color:var(--gold);box-shadow:var(--shadow)}
+.neighbor-profile{display:flex;align-items:center;text-align:center;flex:1;flex-direction:column;gap:10px;padding:27px 14px 19px;text-decoration:none;color:var(--ink)}
+.neighbor-avatar{display:grid;place-items:center;width:88px;height:88px;border-radius:50%;border:2px solid var(--gold-soft);background:var(--paper-soft);position:relative;overflow:hidden;flex:none;box-shadow:0 4px 15px rgba(0,0,0,.06)}
+.neighbor-monogram{font-weight:750;font-size:30px;color:var(--accent)}
+.neighbor-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.neighbor-name{font-size:16px;line-height:1.5;word-break:keep-all;max-width:100%}
+.neighbor-platform{font-size:12px;letter-spacing:.01em;color:var(--accent);font-weight:650}
+.neighbor-desc{color:var(--muted);line-height:1.7;font-size:13px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-width:100%}
+.neighbor-visit{margin-top:auto;padding-top:8px;font-size:12px;color:var(--gold);font-weight:650}
+.neighbor-card-tools{display:flex;border-top:1px solid var(--border)}
+.neighbor-card-tools button{font:inherit;border:0;background:transparent;color:var(--muted);width:50%;padding:10px;cursor:pointer;font-size:12px}
+.neighbor-card-tools button+button{border-left:1px solid var(--border)}
+.neighbor-card-tools button:hover{background:var(--paper-soft);color:var(--accent)}
+.neighbor-draft-warning{margin:0 0 20px;padding:15px 18px;background:var(--paper-soft);border-left:3px solid var(--gold);color:var(--ink);border-radius:8px;line-height:1.7}
+.neighbor-empty{text-align:center;padding:70px 20px;border:1px dashed var(--border);border-radius:16px;background:var(--paper);display:flex;flex-direction:column;align-items:center;gap:12px}
+.neighbor-empty>span{font-size:48px;color:var(--gold)}
+.neighbor-empty strong{font-size:19px}
+.neighbor-empty p{color:var(--muted);margin:0}
+.neighbor-manager{margin:48px auto 10px;border:1px solid var(--border);border-radius:18px;background:var(--paper);overflow:hidden}
+.neighbor-manager>summary{font-size:16px;font-weight:700;cursor:pointer;padding:22px 25px;color:var(--ink)}
+.neighbor-manager>summary:hover{color:var(--accent)}
+.neighbor-manager-body{border-top:1px solid var(--border);padding:25px}
+.neighbor-manager-body>p{line-height:1.85;color:var(--muted);margin-top:0}
+.neighbor-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:24px 0 18px}
+.neighbor-form-grid label{font-weight:650;display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--ink)}
+.neighbor-form-grid input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px;min-width:0}
+.neighbor-form-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.neighbor-publish{margin-top:30px;padding:23px;background:var(--paper-soft);border-radius:13px}
+.neighbor-publish h3{font-size:19px;margin:0 0 10px}
+.neighbor-publish p{color:var(--muted);line-height:1.85}
+.neighbor-publish code{background:var(--paper);border-radius:4px;padding:2px 6px}
+.neighbor-publish .neighbor-note{font-size:12px;margin-bottom:0}
+.neighbor-home{border-top:1px solid var(--border)}
+.neighbor-home-row{display:flex;flex-wrap:wrap;gap:26px}
+.neighbor-home-link{text-decoration:none;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:11px;min-width:86px;max-width:116px;text-align:center;font-size:12px;line-height:1.5}
+.neighbor-home-link:hover{color:var(--accent)}
+.neighbor-avatar.compact{width:65px;height:65px}
+.neighbor-avatar.compact .neighbor-monogram{font-size:22px}
+@media (max-width:990px){.neighbors-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:700px){.neighbor-intro{align-items:flex-start;flex-direction:column}.neighbor-form-grid{grid-template-columns:1fr}.neighbors-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.neighbor-card .neighbor-profile{padding:22px 10px 16px}.neighbor-avatar{height:70px;width:70px}.neighbor-monogram{font-size:24px}.neighbor-manager-body{padding:16px}.neighbor-publish{padding:16px}.neighbor-home-row{gap:18px}}
+@media (max-width:370px){.neighbors-grid{grid-template-columns:1fr}.neighbor-toolbar .neighbor-search{width:100%}}
+@media (prefers-reduced-motion:reduce){.neighbor-card{transition:none}.neighbor-card:hover{transform:none}}
