@@ -255,3 +255,7 @@ body:not(.is-liber-admin) #migrateLocalPosts{display:none!important}
 .cloud-login-identity{color:var(--accent)!important;font-size:12px}
 .cloud-admin-link{color:var(--accent)!important}
 #cloudAuthStatus:not(:empty){margin-top:18px;border-left:3px solid var(--gold);padding:12px;background:var(--paper-soft)}
+
+/* Public readers see the taxonomy in the journal; management is owner-only. */
+body:not(.is-liber-admin) .main-nav a[data-nav="categories"],
+body:not(.is-liber-admin) .journal-sidebar-edit{display:none!important}
