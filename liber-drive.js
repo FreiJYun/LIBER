@@ -7,9 +7,12 @@ const api='https://www.googleapis.com/drive/v3/files';
 const uploads='https://www.googleapis.com/upload/drive/v3/files';
 const rootName='LIBER - 원본 사진 백업';
 let accessToken='',expiresAt=0,tokenClient=null,folderRoot=null;
+const prefKey='liber_google_backup_enabled_v1';
+function enabled(){try{return localStorage.getItem(prefKey)==='yes';}catch{return false;}}
+function preference(value){try{localStorage.setItem(prefKey,value?'yes':'no');}catch{}}
 function connected(){return !!accessToken&&Date.now()<expiresAt-60000;}
 function authorized(){if(!window.LIBERCloud?.isAdmin())throw Error('LIBER 관리자 인증이 필요합니다.');}
-function status(){return connected()?'connected':'disconnected';}
+function status(){return connected()?'connected':enabled()?'reconnect-needed':'disconnected';}
 function connect(){
  authorized();
  if(connected())return Promise.resolve(true);
@@ -38,6 +41,7 @@ function connect(){
     accessToken=response.access_token;
     expiresAt=Date.now()+Math.max(0,Number(response.expires_in)||3600)*1000;
     folderRoot=null;
+    preference(true);
     finish(null,true);
    },
    error_callback(error){
@@ -50,7 +54,7 @@ function connect(){
 }
 function disconnect(){
  const former=accessToken;
- accessToken='';expiresAt=0;folderRoot=null;tokenClient=null;
+ accessToken='';expiresAt=0;folderRoot=null;tokenClient=null;preference(false);
  // Revoke consent when possible; token always discarded locally.
  if(former&&window.google?.accounts?.oauth2?.revoke){
   try{window.google.accounts.oauth2.revoke(former,()=>{});}catch(err){console.warn('Google authorization revocation:',err);}
@@ -74,7 +78,7 @@ async function request(url,options={}){
 function queryPart(value){return String(value).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 async function findNamedFile(parent,name,mime){
  const condition="'"+queryPart(parent)+"' in parents and name = '"+queryPart(name)+"' and trashed = false"+(mime?" and mimeType = '"+queryPart(mime)+"'":"");
- const params=new URLSearchParams({q:condition,fields:'nextPageToken,files(id,name,mimeType,webViewLink)',page_size:'100',spaces:'drive'});
+ const params=new URLSearchParams({q:condition,fields:'nextPageToken,files(id,name,mimeType,webViewLink)',pageSize:'100',spaces:'drive'});
  const data=await request(api+'?'+params);
  return data.files?.[0]||null;
 }
@@ -151,5 +155,5 @@ async function backupOriginals(post,attachments,onProgress=()=>{}){
  onProgress('Google Drive에 사진 원본 '+photos.length+'개 백업 완료');
  return {total:photos.length,uploaded,skipped,folderUrl:'https://drive.google.com/drive/folders/'+parent};
 }
-window.LIBERDrive={connected,status,connect,disconnect,backupOriginals};
+window.LIBERDrive={connected,enabled,status,connect,disconnect,backupOriginals};
 })();
