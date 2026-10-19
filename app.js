@@ -6,6 +6,7 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const app = $('#app');
 const Cats = window.LIBERCategories;
 const Inline = window.LIBERInlinePhotos;
+const Cloud = window.LIBERCloud;
 const DB_NAME = 'liber_personal_blog_v1';
 const SETTINGS_KEY = 'liber_blog_preferences_v1';
 const SEED_KEY = 'liber_blog_seeded_v1';
@@ -49,16 +50,23 @@ function store(name, mode, cb) { return new Promise((resolve, reject) => {
   tx.onerror = () => reject(tx.error || new Error('저장 중 오류가 발생했습니다.'));
   tx.onabort = () => reject(tx.error || new Error('저장 작업이 중단되었습니다.'));
 }); }
-async function allPosts(includeDrafts = true) {
+async function localAllPosts(includeDrafts = true) {
   const rows = await store('posts','readonly', s => s.getAll());
   return rows.filter(p => includeDrafts || p.published !== false).sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
 }
-function getPost(id) { return store('posts','readonly', s => s.get(id)); }
-function putPost(post) { return store('posts','readwrite',s => s.put(post)); }
-function removePost(id) { return store('posts','readwrite',s => s.delete(id)); }
+function localGetPost(id) { return store('posts','readonly', s => s.get(id)); }
+function localPutPost(post) { return store('posts','readwrite',s => s.put(post)); }
+function allPosts(includeDrafts = true) { return Cloud.posts(includeDrafts); }
+function getPost(id) { return Cloud.post(id); }
+function putPost(post) { return Cloud.savePost(post); }
+function removePost(id) { return Cloud.deletePost(id); }
 function assetGet(id) { return store('assets','readonly',s => s.get(id)); }
 function assetPut(asset) { return store('assets','readwrite',s => s.put(asset)); }
-function objectURL(blob) { const u = URL.createObjectURL(blob); mediaURLs.push(u); return u; }
+function objectURL(blob) {
+ if(typeof blob==='string')return blob;
+ const u=URL.createObjectURL(blob);mediaURLs.push(u);return u;
+}
+function mediaSrc(file){return file?.remoteUrl || (file?.storagePath ? Cloud.urlFor(file.storagePath) : '') || (file?.blob ? objectURL(file.blob) : '');}
 function clearMediaURLs() { for (const u of mediaURLs) URL.revokeObjectURL(u); mediaURLs = []; }
 function sanitizeHTML(input) {
   const parse = document.createElement('template'); parse.innerHTML = input || '';
@@ -93,10 +101,8 @@ function seedPosts() {
   ];
 }
 async function ensureSeed() {
-  if(localStorage.getItem(SEED_KEY)) return;
-  const rows = await allPosts();
-  if(rows.length===0) for(const item of seedPosts()) await putPost(item);
-  localStorage.setItem(SEED_KEY,'1');
+ // Visitors never receive separate browser-only seed posts.
+ return;
 }
 async function applyConfig() {
   document.body.dataset.theme = ['classic','night','modern'].includes(config.theme) ? config.theme : 'classic';
@@ -127,7 +133,7 @@ function categoryGlyph(cat) {
 }
 function thumb(post) {
   const cover = (post.attachments||[]).find(f => (f.type||'').startsWith('image/'));
-  if(cover && cover.blob) return `<div class="post-image"><img loading="lazy" src="${objectURL(cover.blob)}" alt="${escapeHTML(post.title)}의 첨부 이미지" /></div>`;
+  if(cover && (cover.blob||cover.remoteUrl)) return `<div class="post-image"><img loading="lazy" src="${escapeHTML(mediaSrc(cover))}" alt="${escapeHTML(post.title)}의 첨부 이미지" /></div>`;
   return `<div class="post-image pattern-${categoryClass(post.category)}"><span class="art-glyph" aria-hidden="true">${categoryGlyph(post.category)}</span></div>`;
 }
 function card(post) {
@@ -173,12 +179,12 @@ function mediaSection(post, coverIncluded = false) {
  const original=post.attachments||[], links=post.links||[];
  // The first image has already been displayed as the article cover.
  const inlineIds=Inline.ids(post.body);
- const firstImageIndex = coverIncluded ? original.findIndex(a=>(a.type||'').startsWith('image/')&&a.blob&&!inlineIds.has(String(a.id))) : -1;
+ const firstImageIndex = coverIncluded ? original.findIndex(a=>(a.type||'').startsWith('image/')&&(a.blob||a.remoteUrl)&&!inlineIds.has(String(a.id))) : -1;
  const attachments = original.filter((a,i)=>i!==firstImageIndex&&!inlineIds.has(String(a.id)));
  if(!attachments.length&&!links.length) return '';
  let items=attachments.map(a=>{
-  if(!a.blob) return '';
-  const u=objectURL(a.blob);
+  if(!a.blob&&!a.remoteUrl)return '';
+  const u=mediaSrc(a);
   if((a.type||'').startsWith('image/')) return `<figure class="media-tile"><img src="${u}" alt="${escapeHTML(a.name)}" loading="lazy"/><figcaption>${escapeHTML(a.name)}</figcaption></figure>`;
   if((a.type||'').startsWith('video/')) return `<figure class="media-tile"><video controls preload="metadata" src="${u}">이 브라우저는 동영상을 지원하지 않습니다.</video><figcaption>${escapeHTML(a.name)}</figcaption></figure>`;
   return '';
@@ -195,11 +201,15 @@ async function articlePage(id) {
  const post = await getPost(id);
  if(!post) return `${banner('THE JOURNAL','글을 찾을 수 없습니다','주소가 변경되었거나 삭제된 글입니다.')}<div class="container content-section"><a class="btn" href="#/posts">글 목록으로</a></div>`;
  const inlineIds=Inline.ids(post.body);
- const cover=(post.attachments||[]).find(a=>(a.type||'').startsWith('image/')&&a.blob&&!inlineIds.has(String(a.id)));
- return `<article class="article-shell"><nav class="crumb" aria-label="현재 위치"><a href="#/home">HOME</a> / <a href="#/posts">JOURNAL</a> / ${escapeHTML(Cats.postName(post))}</nav><header class="article-header"><div class="article-labels"><span>${escapeHTML(Cats.postName(post))}</span>${post.demo?'<span class="demo-tag">예시 글</span>':''}${post.published===false?'<span class="demo-tag">임시저장</span>':''}</div><h1>${escapeHTML(post.title)}</h1>${post.subtitle?`<p class="article-subtitle">${escapeHTML(post.subtitle)}</p>`:''}${post.tags?.length?`<div class="article-tags">${post.tags.map(t=>`<span>#${escapeHTML(t)}</span>`).join('')}</div>`:''}<div class="article-meta"><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time><span>약 ${readTime(post)}분 읽기</span>${post.updatedAt?`<span>수정 ${dateText(post.updatedAt)}</span>`:''}</div></header>${cover?`<div class="article-cover"><img src="${objectURL(cover.blob)}" alt="${escapeHTML(post.title)}" /></div>`:''}<div class="article-body">${sanitizeHTML(post.body)}</div>${mediaSection(post,!!cover)}<div class="article-actions"><a href="#/posts" class="btn btn-outline btn-sm">← 모든 글 보기</a><div class="btn-row"><a href="#/write/${encodeURIComponent(post.id)}" class="btn btn-quiet btn-sm">이 글 수정</a><button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(post.id)}">글 삭제</button></div></div><div class="article-end">✦</div></article>`;
+ const cover=(post.attachments||[]).find(a=>(a.type||'').startsWith('image/')&&(a.blob||a.remoteUrl)&&!inlineIds.has(String(a.id)));
+ return `<article class="article-shell"><nav class="crumb" aria-label="현재 위치"><a href="#/home">HOME</a> / <a href="#/posts">JOURNAL</a> / ${escapeHTML(Cats.postName(post))}</nav><header class="article-header"><div class="article-labels"><span>${escapeHTML(Cats.postName(post))}</span>${post.demo?'<span class="demo-tag">예시 글</span>':''}${post.published===false?'<span class="demo-tag">임시저장</span>':''}</div><h1>${escapeHTML(post.title)}</h1>${post.subtitle?`<p class="article-subtitle">${escapeHTML(post.subtitle)}</p>`:''}${post.tags?.length?`<div class="article-tags">${post.tags.map(t=>`<span>#${escapeHTML(t)}</span>`).join('')}</div>`:''}<div class="article-meta"><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time><span>약 ${readTime(post)}분 읽기</span>${post.updatedAt?`<span>수정 ${dateText(post.updatedAt)}</span>`:''}</div></header>${cover?`<div class="article-cover"><img src="${escapeHTML(mediaSrc(cover))}" alt="${escapeHTML(post.title)}" /></div>`:''}<div class="article-body">${sanitizeHTML(post.body)}</div>${mediaSection(post,!!cover)}<div class="article-actions"><a href="#/posts" class="btn btn-outline btn-sm">← 모든 글 보기</a>${Cloud.isAdmin()? `<div class="btn-row"><a href="#/write/${encodeURIComponent(post.id)}" class="btn btn-quiet btn-sm">이 글 수정</a><button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(post.id)}">글 삭제</button></div>`:''}</div><div class="article-end">✦</div></article>`;
+}
+function adminRequiredPage(message) {
+ return `${banner('ADMINISTRATION','관리자 전용','이 작업은 LIBER 관리자만 수행할 수 있습니다.')}<section class="content-section"><div class="container"><div class="panel"><h3>${escapeHTML(message)}</h3><p>관리자 인증을 마친 후 다시 시도해 주세요.</p><a href="#/admin" class="btn">관리자 로그인 →</a></div></div></section>`;
 }
 function categoryOptions(current) { return Cats.options('posts',Cats.postId(current || {category:'일상'})); }
 async function editorPage(id) {
+ if(!Cloud.isAdmin())return adminRequiredPage('글쓰기·편집은 관리자만 가능합니다.');
  editorId=id||null;
  const post=editorId?await getPost(editorId):null;
  if(editorId&&!post) return `${banner('EDITOR','게시글을 찾을 수 없습니다','새 게시글을 작성해 주세요.')}<div class="container content-section"><a class="btn" href="#/write">새 글쓰기</a></div>`;
@@ -227,20 +237,22 @@ async function render() {
  else if(route==='about') app.innerHTML=aboutPage();
  else if(route==='gallery') app.innerHTML=galleryPage();
  else if(route==='neighbors') app.innerHTML=await window.LIBERNeighbors.render();
- else if(route==='categories') app.innerHTML=Cats.page();
+ else if(route==='categories') app.innerHTML=Cloud.isAdmin()?Cats.page():adminRequiredPage('카테고리 변경은 관리자만 가능합니다.');
  else if(route==='settings') app.innerHTML=settingsPage();
+ else if(route==='admin') app.innerHTML=adminPage();
  else app.innerHTML=await home();
  app.classList.remove('is-leaving'); app.classList.remove('page-in'); void app.offsetWidth; app.classList.add('page-in');
  $('#copyrightYear').textContent = new Date().getFullYear();
  if(route==='post') {
   const post=await getPost(decodeURIComponent(parts.slice(1).join('/')));
-  Inline.hydrate($('.article-body'),post?.attachments||[],objectURL,false);
+  Inline.hydrate($('.article-body'),post?.attachments||[],mediaSrc,false);
  }
  if(route==='write') setupEditor();
  if(route==='settings') setupSettings();
  if(route==='posts') {setupSearch();window.LIBERJournalSidebar.setup();}
  if(route==='neighbors') window.LIBERNeighbors.setup();
- if(route==='categories') Cats.setup();
+ if(route==='categories'&&Cloud.isAdmin()) Cats.setup();
+ if(route==='admin') setupAdmin();
 }
 async function pageChange() {
  const seq=++pageSwitchId;
@@ -262,7 +274,7 @@ function setupEditor() {
  // Prevent untrusted HTML from being pasted into contenteditable.
  rich.addEventListener('paste',e=>{ e.preventDefault(); const plain=e.clipboardData.getData('text/plain'); rich.focus(); document.execCommand('insertText',false,plain); });
  renderUploadList();
- inlineController=Inline.setupEditor({rich,attachments:()=>editorFiles,createObjectURL:objectURL,makeId:uid,onFilesChanged:renderUploadList,notify:toast});
+ inlineController=Inline.setupEditor({rich,attachments:()=>editorFiles,createObjectURL:mediaSrc,makeId:uid,onFilesChanged:renderUploadList,notify:toast});
  $('#mediaUpload')?.addEventListener('change',e=>{
   const files=Array.from(e.target.files||[]);
   for(const file of files) {
@@ -320,7 +332,7 @@ function handleClick(e) {
  const cat=e.target.closest('[data-category]'); if(cat) {activeCategory=cat.dataset.category; render().catch(showError);return;}
  const theme=e.target.closest('[data-theme-choice]'); if(theme) {config.theme=theme.dataset.themeChoice;writeConfig();$$('[data-theme-choice]').forEach(el=>{el.classList.toggle('selected',el===theme);el.setAttribute('aria-pressed',String(el===theme));});toast('테마가 변경되었습니다.');return;}
  const font=e.target.closest('[data-font-choice]'); if(font) {if(font.dataset.fontChoice==='custom' && !$('#user-font-style')) {toast('먼저 전용 서체 파일을 등록해 주세요.');$('#customFontInput')?.focus();return;}config.font=font.dataset.fontChoice;writeConfig();$$('[data-font-choice]').forEach(el=>{el.classList.toggle('selected',el===font);el.setAttribute('aria-pressed',String(el===font));});toast('서체가 변경되었습니다.');return;}
- const del=e.target.closest('[data-delete]'); if(del) {deleteArticle(del.dataset.delete);return;}
+ const del=e.target.closest('[data-delete]'); if(del) {if(!Cloud.isAdmin()){toast('관리자 권한이 필요합니다.');return;}deleteArticle(del.dataset.delete);return;}
  const remove=e.target.closest('[data-remove-upload]'); if(remove) {inlineController?.removeById(remove.dataset.removeUpload);editorFiles=editorFiles.filter(f=>f.id!==remove.dataset.removeUpload);renderUploadList();return;}
  const tool=e.target.closest('[data-command], [data-block]'); if(tool) {const editor=$('#richEditor');if(!editor)return;editor.focus();if(tool.dataset.block){document.execCommand('formatBlock',false,tool.dataset.block);}else if(tool.dataset.command==='createLink'){const url=prompt('추가할 웹 주소를 입력해 주세요 (https://...)');if(url && /^https?:\/\//i.test(url)) document.execCommand('createLink',false,url);else if(url)toast('http:// 또는 https:// 주소를 사용해 주세요.');}else document.execCommand(tool.dataset.command,false,null);return;}
 }
@@ -367,7 +379,14 @@ async function importBackup(e) {
 }
 async function boot() {
  $('#copyrightYear').textContent=new Date().getFullYear();
- try { db=await getDB();await Cats.load();await ensureSeed();await applyConfig();await render(); }
+ try {
+  db=await getDB();
+  await Cloud.init();
+  document.body.classList.toggle('is-liber-admin',Cloud.isAdmin());
+  const identity=await Cloud.siteIdentity();
+  if(identity&&typeof identity==='object')config={...config,...Object.fromEntries(Object.entries(identity).filter(([key])=>['title','tagline','heroTitle','heroDescription','about'].includes(key)))};
+  await Cats.load();await applyConfig();await render();
+ }
  catch(err){showError(err);}
  window.addEventListener('hashchange',pageChange);
  $('#mobileMenu').addEventListener('click',()=>{const nav=$('#mainNav');const open=nav.classList.toggle('open');$('#mobileMenu').setAttribute('aria-expanded',String(open));});
