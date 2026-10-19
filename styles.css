@@ -259,3 +259,10 @@ body:not(.is-liber-admin) #migrateLocalPosts{display:none!important}
 /* Public readers see the taxonomy in the journal; management is owner-only. */
 body:not(.is-liber-admin) .main-nav a[data-nav="categories"],
 body:not(.is-liber-admin) .journal-sidebar-edit{display:none!important}
+
+
+/* Google Drive original-photo backup — admin-only controls. */
+.drive-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0 10px}
+.drive-actions [hidden],#retryDriveBackup[hidden],#connectDriveEditor[hidden]{display:none!important}
+#driveConnectionStatus{margin-top:10px;overflow-wrap:anywhere}
+#retryDriveBackup,#connectDriveEditor{white-space:normal}
