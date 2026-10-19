@@ -344,6 +344,7 @@ async function saveEditor(published) {
  if(!catNode){toast('카테고리를 선택해 주세요.');return;}
  const cat=catNode.name;
  const tags=Array.from(new Set(($('#editTags')?.value||'').split(',').map(t=>t.trim().slice(0,30)).filter(Boolean))).slice(0,8);
+ await Cats.sync();
  const prev=editorId?await getPost(editorId):null;
  const links=($('#editLinks')?.value||'').split(/\n/).map(x=>x.trim()).filter(Boolean).filter(x=>{try {const u=new URL(x);return ['http:','https:'].includes(u.protocol);}catch{return false;}}).slice(0,20);
  const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
@@ -394,7 +395,7 @@ async function exportBackup(){
  try{
   const posts=await allPosts(true),categories=await Cloud.listCategories(),neighbors=await Cloud.neighbors();
   const identity=await Cloud.siteIdentity();
-  const asset=await assetGet('customFont'),packed=[];
+  const asset=db?await assetGet('customFont'):null,packed=[];
   toast('클라우드 미디어를 포함해 백업을 준비하고 있습니다.');
   for(const post of posts){
    const cp={...post,attachments:[]};
@@ -455,7 +456,7 @@ async function importBackup(e){
     attachments:attaches
    });count++;
   }
-  if(data.customFont?.data)await assetPut({id:'customFont',name:String(data.customFont.name||'custom-font'),blob:dataURLtoBlob(data.customFont.data)});
+  if(data.customFont?.data&&db)await assetPut({id:'customFont',name:String(data.customFont.name||'custom-font'),blob:dataURLtoBlob(data.customFont.data)});
   if(data.config){
    const identity=Object.fromEntries(Object.entries(data.config).filter(([k])=>['title','tagline','heroTitle','heroDescription','about'].includes(k)));
    await Cloud.saveSiteIdentity(identity);
@@ -465,7 +466,7 @@ async function importBackup(e){
 }
 async function migrateLocalPosts(){
  if(!Cloud.isAdmin()){toast('관리자 인증이 필요합니다.');location.hash='#/admin';return;}
- const locals=(await localAllPosts()).filter(p=>!p.demo);
+ const locals=db?(await localAllPosts()).filter(p=>!p.demo):[];
  if(!locals.length){toast('이 브라우저에 이전할 실제 게시글이 없습니다.');return;}
  if(!confirm('이 브라우저에서 작성한 '+locals.length+'개 게시글을 Supabase에 임시저장 상태로 복사할까요? 로컬 원본은 삭제하지 않습니다.'))return;
  let count=0,skipped=0;
@@ -485,7 +486,7 @@ async function migrateLocalPosts(){
 async function boot() {
  $('#copyrightYear').textContent=new Date().getFullYear();
  try {
-  db=await getDB();
+  try{db=await getDB();}catch(e){console.warn('Local browser archive unavailable',e);db=null;}
   await Cloud.init();
   document.body.classList.toggle('is-liber-admin',Cloud.isAdmin());
   const identity=await Cloud.siteIdentity();
