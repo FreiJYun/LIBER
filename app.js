@@ -5,6 +5,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const app = $('#app');
 const Cats = window.LIBERCategories;
+const Inline = window.LIBERInlinePhotos;
 const DB_NAME = 'liber_personal_blog_v1';
 const SETTINGS_KEY = 'liber_blog_preferences_v1';
 const SEED_KEY = 'liber_blog_seeded_v1';
@@ -17,7 +18,7 @@ const defaults = {
 };
 let config = loadConfig();
 let db, currentRoute = '', activeCategory = '전체', searchQuery = '';
-let editorFiles = [], editorId = null;
+let editorFiles = [], editorId = null, inlineController = null;
 let mediaURLs = [], customFontURL = null, leaveTimer = null, toastTimer = null;
 let pageSwitchId = 0;
 function escapeHTML(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -67,7 +68,8 @@ function sanitizeHTML(input) {
     if(node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.nodeValue);
     if(node.nodeType !== Node.ELEMENT_NODE) return document.createDocumentFragment();
     const tag = node.tagName;
-    if(blocked.has(tag)) return document.createDocumentFragment();
+    if(tag === 'SPAN' && node.hasAttribute('data-photo-id')) return Inline.cleanMarker(node);
+  if(blocked.has(tag)) return document.createDocumentFragment();
     const out = allowed.has(tag) ? document.createElement(tag.toLowerCase()) : document.createDocumentFragment();
     if(tag === 'A' && out.nodeType === Node.ELEMENT_NODE) {
       const href = node.getAttribute('href') || '';
@@ -170,8 +172,9 @@ function parseYouTube(url) { try { const u = new URL(url); let id = '';
 function mediaSection(post, coverIncluded = false) {
  const original=post.attachments||[], links=post.links||[];
  // The first image has already been displayed as the article cover.
- const firstImageIndex = coverIncluded ? original.findIndex(a=>(a.type||'').startsWith('image/')&&a.blob) : -1;
- const attachments = original.filter((_,i)=>i!==firstImageIndex);
+ const inlineIds=Inline.ids(post.body);
+ const firstImageIndex = coverIncluded ? original.findIndex(a=>(a.type||'').startsWith('image/')&&a.blob&&!inlineIds.has(String(a.id))) : -1;
+ const attachments = original.filter((a,i)=>i!==firstImageIndex&&!inlineIds.has(String(a.id)));
  if(!attachments.length&&!links.length) return '';
  let items=attachments.map(a=>{
   if(!a.blob) return '';
@@ -191,7 +194,8 @@ function mediaSection(post, coverIncluded = false) {
 async function articlePage(id) {
  const post = await getPost(id);
  if(!post) return `${banner('THE JOURNAL','글을 찾을 수 없습니다','주소가 변경되었거나 삭제된 글입니다.')}<div class="container content-section"><a class="btn" href="#/posts">글 목록으로</a></div>`;
- const cover=(post.attachments||[]).find(a=>(a.type||'').startsWith('image/')&&a.blob);
+ const inlineIds=Inline.ids(post.body);
+ const cover=(post.attachments||[]).find(a=>(a.type||'').startsWith('image/')&&a.blob&&!inlineIds.has(String(a.id)));
  return `<article class="article-shell"><nav class="crumb" aria-label="현재 위치"><a href="#/home">HOME</a> / <a href="#/posts">JOURNAL</a> / ${escapeHTML(Cats.postName(post))}</nav><header class="article-header"><div class="article-labels"><span>${escapeHTML(Cats.postName(post))}</span>${post.demo?'<span class="demo-tag">예시 글</span>':''}${post.published===false?'<span class="demo-tag">임시저장</span>':''}</div><h1>${escapeHTML(post.title)}</h1>${post.subtitle?`<p class="article-subtitle">${escapeHTML(post.subtitle)}</p>`:''}${post.tags?.length?`<div class="article-tags">${post.tags.map(t=>`<span>#${escapeHTML(t)}</span>`).join('')}</div>`:''}<div class="article-meta"><time datetime="${new Date(post.createdAt).toISOString()}">${dateText(post.createdAt)}</time><span>약 ${readTime(post)}분 읽기</span>${post.updatedAt?`<span>수정 ${dateText(post.updatedAt)}</span>`:''}</div></header>${cover?`<div class="article-cover"><img src="${objectURL(cover.blob)}" alt="${escapeHTML(post.title)}" /></div>`:''}<div class="article-body">${sanitizeHTML(post.body)}</div>${mediaSection(post,!!cover)}<div class="article-actions"><a href="#/posts" class="btn btn-outline btn-sm">← 모든 글 보기</a><div class="btn-row"><a href="#/write/${encodeURIComponent(post.id)}" class="btn btn-quiet btn-sm">이 글 수정</a><button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(post.id)}">글 삭제</button></div></div><div class="article-end">✦</div></article>`;
 }
 function categoryOptions(current) { return Cats.options('posts',Cats.postId(current || {category:'일상'})); }
@@ -201,7 +205,7 @@ async function editorPage(id) {
  if(editorId&&!post) return `${banner('EDITOR','게시글을 찾을 수 없습니다','새 게시글을 작성해 주세요.')}<div class="container content-section"><a class="btn" href="#/write">새 글쓰기</a></div>`;
  editorFiles=(post?.attachments||[]).map(a=>({...a}));
  const drafts=(await allPosts()).filter(p=>p.published===false);
- return `${banner('WRITE YOUR STORY',post?'글 수정하기':'새로운 기록','지금의 생각을 자유롭게 적어 보세요.')}<section class="content-section"><div class="container editor-grid"><div><div class="panel"><div class="field"><label for="editTitle">게시글 제목</label><input type="text" id="editTitle" maxlength="160" placeholder="어떤 이야기를 남기실 건가요?" value="${escapeHTML(post?.title||'')}" required /></div><div class="field"><label for="editSubtitle">짧은 소개 (선택)</label><input type="text" id="editSubtitle" maxlength="250" placeholder="게시글 목록에 표시될 한 문장" value="${escapeHTML(post?.subtitle||'')}" /></div><div class="field"><span class="field-title">본문</span><div class="editor-toolbar" role="toolbar" aria-label="서식 편집 도구"><button type="button" class="tool-btn" data-command="bold" title="굵게"><b>B</b></button><button type="button" class="tool-btn" data-command="italic" title="기울임"><i>I</i></button><button type="button" class="tool-btn" data-command="underline" title="밑줄"><u>U</u></button><span class="tool-sep"></span><button type="button" class="tool-btn" data-block="p" title="본문">본문</button><button type="button" class="tool-btn" data-block="h2" title="큰 제목">H2</button><button type="button" class="tool-btn" data-block="h3" title="작은 제목">H3</button><span class="tool-sep"></span><button type="button" class="tool-btn" data-command="insertUnorderedList" title="글머리 기호">☷</button><button type="button" class="tool-btn" data-command="insertOrderedList" title="번호 목록">①</button><button type="button" class="tool-btn" data-block="blockquote" title="인용문">❝</button><button type="button" class="tool-btn" data-command="createLink" title="링크 삽입">↗</button><button type="button" class="tool-btn" data-command="removeFormat" title="서식 제거">Tx</button></div><div class="rich-editor" id="richEditor" contenteditable="true" role="textbox" aria-label="게시글 본문" aria-multiline="true" data-placeholder="이야기를 시작하세요...">${sanitizeHTML(post?.body||'')}</div><p class="field-help">글을 선택한 뒤 위쪽 도구로 서식을 적용할 수 있습니다. 한글은 어절 단위로 줄바꿈하도록 설정했습니다.</p></div></div><div class="editor-action-row"><a href="${post?`#/post/${encodeURIComponent(post.id)}`:'#/posts'}" class="btn btn-outline">← 돌아가기</a><div class="btn-row"><button id="saveDraft" type="button" class="btn btn-quiet">임시저장</button><button id="publishPost" type="button" class="btn">${post?.published===false||!post?'게시하기':'변경사항 저장'} →</button></div></div><p class="draft-msg" id="editorMessage">※ 글과 첨부 파일은 현재 브라우저에만 저장됩니다. 다른 기기에 자동으로 동기화되지 않습니다.</p></div><aside><div class="panel"><h3>글 설정</h3><div class="field"><label for="editCategory">카테고리</label><select id="editCategory">${categoryOptions(post)}</select><p class="field-help">선택한 카테고리의 하위 분류를 빠르게 추가하거나 <a href="#/categories">카테고리 관리</a>에서 트리를 편집하세요.</p><input type="text" id="newCategory" maxlength="40" placeholder="새 하위 카테고리 이름 (선택)" /></div><div class="field"><label for="editTags">태그 (쉼표로 구분, 최대 8개)</label><input type="text" id="editTags" maxlength="240" placeholder="예: 역사, 독서노트" value="${escapeHTML((post?.tags||[]).join(', '))}" /></div><div class="field"><span class="field-title">사진·동영상 첨부</span><div class="upload-zone"><strong>＋ 파일 선택</strong><p>사진 또는 동영상 여러 개 첨부 가능</p><input type="file" id="mediaUpload" accept="image/*,video/*" multiple aria-label="사진 또는 동영상 업로드" /></div><div class="upload-list" id="uploadList"></div><p class="field-help">첨부한 미디어는 게시글 하단에 순서대로 표시됩니다. 큰 동영상은 저장 공간에 제한이 있을 수 있습니다.</p></div><div class="field"><label for="editLinks">동영상·유튜브 링크</label><textarea id="editLinks" rows="4" placeholder="https://youtu.be/...\n링크를 한 줄에 하나씩 입력">${escapeHTML((post?.links||[]).join('\n'))}</textarea></div></div><div class="side-help">✦ <strong>로컬 블로그 안내</strong><br>이 버전에서는 작성하신 글이 방문자에게 공유되지 않습니다. 공개 운영 전에 로그인·DB 연동을 추가해야 합니다.</div>${drafts.length?`<div class="side-help"><strong>임시저장 글 (${drafts.length})</strong><br>${drafts.slice(0,5).map(d=>`<a href="#/write/${encodeURIComponent(d.id)}">↳ ${escapeHTML(crop(d.title||'제목 없음',24))}</a>`).join('<br>')}</div>`:''}</aside></div></section>`;
+ return `${banner('WRITE YOUR STORY',post?'글 수정하기':'새로운 기록','지금의 생각을 자유롭게 적어 보세요.')}<section class="content-section"><div class="container editor-grid"><div><div class="panel"><div class="field"><label for="editTitle">게시글 제목</label><input type="text" id="editTitle" maxlength="160" placeholder="어떤 이야기를 남기실 건가요?" value="${escapeHTML(post?.title||'')}" required /></div><div class="field"><label for="editSubtitle">짧은 소개 (선택)</label><input type="text" id="editSubtitle" maxlength="250" placeholder="게시글 목록에 표시될 한 문장" value="${escapeHTML(post?.subtitle||'')}" /></div><div class="field"><span class="field-title">본문</span><div class="editor-toolbar" role="toolbar" aria-label="서식 편집 도구"><button type="button" class="tool-btn" data-command="bold" title="굵게"><b>B</b></button><button type="button" class="tool-btn" data-command="italic" title="기울임"><i>I</i></button><button type="button" class="tool-btn" data-command="underline" title="밑줄"><u>U</u></button><span class="tool-sep"></span><button type="button" class="tool-btn" data-block="p" title="본문">본문</button><button type="button" class="tool-btn" data-block="h2" title="큰 제목">H2</button><button type="button" class="tool-btn" data-block="h3" title="작은 제목">H3</button><span class="tool-sep"></span><button type="button" class="tool-btn" data-command="insertUnorderedList" title="글머리 기호">☷</button><button type="button" class="tool-btn" data-command="insertOrderedList" title="번호 목록">①</button><button type="button" class="tool-btn" data-block="blockquote" title="인용문">❝</button><button type="button" class="tool-btn" data-command="createLink" title="링크 삽입">↗</button><button type="button" class="tool-btn" data-command="removeFormat" title="서식 제거">Tx</button><span class="tool-sep"></span><button type="button" class="tool-btn inline-image-trigger" id="insertInlinePhoto" title="커서 위치에 사진 삽입">▧ 사진 삽입</button><input type="file" id="inlinePhotoInput" accept="image/*" multiple hidden /></div><div class="rich-editor" id="richEditor" contenteditable="true" role="textbox" aria-label="게시글 본문" aria-multiline="true" data-placeholder="이야기를 시작하세요...">${sanitizeHTML(post?.body||'')}</div><div id="inlinePhotoControls" class="inline-photo-controls" hidden><div class="inline-photo-controls-heading"><strong>선택한 사진 편집</strong><span>드래그해서 본문 위치를 이동할 수도 있습니다.</span></div><div class="inline-photo-controls-grid"><label>사진 설명<input type="text" id="inlinePhotoCaption" maxlength="200" placeholder="사진 아래 표시할 설명" /></label><label>사진 크기<select id="inlinePhotoWidth"><option value="100">크게 (100%)</option><option value="75">중간 (75%)</option><option value="50">작게 (50%)</option></select></label><label>정렬<select id="inlinePhotoAlign"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label></div><div class="inline-photo-controls-actions"><button type="button" id="inlinePhotoMoveUp" class="btn btn-sm btn-outline">↑ 앞 문단으로</button><button type="button" id="inlinePhotoMoveDown" class="btn btn-sm btn-outline">↓ 다음 문단으로</button><button type="button" id="inlinePhotoRemove" class="btn btn-sm btn-danger">사진 제거</button></div></div><p class="field-help">사진 삽입을 누르면 현재 커서 위치에 추가됩니다. 삽입한 사진을 클릭하면 크기·정렬·설명을 바꿀 수 있습니다.  한글은 어절 단위로 줄바꿈하도록 설정했습니다.</p></div></div><div class="editor-action-row"><a href="${post?`#/post/${encodeURIComponent(post.id)}`:'#/posts'}" class="btn btn-outline">← 돌아가기</a><div class="btn-row"><button id="saveDraft" type="button" class="btn btn-quiet">임시저장</button><button id="publishPost" type="button" class="btn">${post?.published===false||!post?'게시하기':'변경사항 저장'} →</button></div></div><p class="draft-msg" id="editorMessage">※ 글과 첨부 파일은 현재 브라우저에만 저장됩니다. 다른 기기에 자동으로 동기화되지 않습니다.</p></div><aside><div class="panel"><h3>글 설정</h3><div class="field"><label for="editCategory">카테고리</label><select id="editCategory">${categoryOptions(post)}</select><p class="field-help">선택한 카테고리의 하위 분류를 빠르게 추가하거나 <a href="#/categories">카테고리 관리</a>에서 트리를 편집하세요.</p><input type="text" id="newCategory" maxlength="40" placeholder="새 하위 카테고리 이름 (선택)" /></div><div class="field"><label for="editTags">태그 (쉼표로 구분, 최대 8개)</label><input type="text" id="editTags" maxlength="240" placeholder="예: 역사, 독서노트" value="${escapeHTML((post?.tags||[]).join(', '))}" /></div><div class="field"><span class="field-title">사진·동영상 첨부</span><div class="upload-zone"><strong>＋ 파일 선택</strong><p>사진 또는 동영상 여러 개 첨부 가능</p><input type="file" id="mediaUpload" accept="image/*,video/*" multiple aria-label="사진 또는 동영상 업로드" /></div><div class="upload-list" id="uploadList"></div><p class="field-help">본문에 삽입한 사진은 그 위치에 나타나며, 별도 첨부 사진·영상은 글 하단에 표시됩니다. 큰 파일은 브라우저 저장 공간에 제한이 있을 수 있습니다.</p></div><div class="field"><label for="editLinks">동영상·유튜브 링크</label><textarea id="editLinks" rows="4" placeholder="https://youtu.be/...\n링크를 한 줄에 하나씩 입력">${escapeHTML((post?.links||[]).join('\n'))}</textarea></div></div><div class="side-help">✦ <strong>로컬 블로그 안내</strong><br>이 버전에서는 작성하신 글이 방문자에게 공유되지 않습니다. 공개 운영 전에 로그인·DB 연동을 추가해야 합니다.</div>${drafts.length?`<div class="side-help"><strong>임시저장 글 (${drafts.length})</strong><br>${drafts.slice(0,5).map(d=>`<a href="#/write/${encodeURIComponent(d.id)}">↳ ${escapeHTML(crop(d.title||'제목 없음',24))}</a>`).join('<br>')}</div>`:''}</aside></div></section>`;
 }
 function aboutPage() { return `${banner('THE PERSON BEHIND THE PAGES','이 공간에 대하여','누구의 무엇을 위한 기록인지 소개합니다.')}<div class="container about-layout"><div><div class="eyebrow">NICE TO MEET YOU</div><h2>한 편의 글에서 시작되는<br>새로운 대화와 발견.</h2><span class="line-gold"></span><p>${escapeHTML(config.about||defaults.about)}</p><div class="btn-row"><a href="#/posts" class="btn">기록 둘러보기 →</a><a href="#/settings" class="btn btn-outline">소개글 수정</a></div></div><div class="about-decoration"><strong>✦</strong></div></div>`; }
 function galleryPage() { return `${banner('THE GALLERY','사진첩','사진과 순간을 따로 모아 둘 공간입니다.')}<div class="container"><section class="gallery-await"><div class="symbol">❧</div><div class="eyebrow">COMING LATER</div><h2>사진첩은 준비 중입니다</h2><p>우선 블로그 글에 사진과 동영상을 첨부할 수 있습니다.<br>독립 사진첩은 나중에 확장할 수 있도록 메뉴를 마련했습니다.</p><a href="#/posts" class="btn btn-outline">블로그로 돌아가기 →</a></section></div>`; }
@@ -228,6 +232,10 @@ async function render() {
  else app.innerHTML=await home();
  app.classList.remove('is-leaving'); app.classList.remove('page-in'); void app.offsetWidth; app.classList.add('page-in');
  $('#copyrightYear').textContent = new Date().getFullYear();
+ if(route==='post') {
+  const post=await getPost(decodeURIComponent(parts.slice(1).join('/')));
+  Inline.hydrate($('.article-body'),post?.attachments||[],objectURL,false);
+ }
  if(route==='write') setupEditor();
  if(route==='settings') setupSettings();
  if(route==='posts') {setupSearch();window.LIBERJournalSidebar.setup();}
@@ -254,6 +262,7 @@ function setupEditor() {
  // Prevent untrusted HTML from being pasted into contenteditable.
  rich.addEventListener('paste',e=>{ e.preventDefault(); const plain=e.clipboardData.getData('text/plain'); rich.focus(); document.execCommand('insertText',false,plain); });
  renderUploadList();
+ inlineController=Inline.setupEditor({rich,attachments:()=>editorFiles,createObjectURL:objectURL,makeId:uid,onFilesChanged:renderUploadList,notify:toast});
  $('#mediaUpload')?.addEventListener('change',e=>{
   const files=Array.from(e.target.files||[]);
   for(const file of files) {
@@ -273,7 +282,7 @@ function renderUploadList() {
 async function saveEditor(published) {
  const title=$('#editTitle')?.value.trim(); const body=sanitizeHTML($('#richEditor')?.innerHTML||'');
  if(!title) { toast('게시글 제목을 입력해 주세요.'); $('#editTitle')?.focus(); return; }
- if(!txt(body).trim()) { toast('게시글 본문을 입력해 주세요.'); $('#richEditor')?.focus(); return; }
+ if(!txt(body).trim() && !Inline.ids(body).size) { toast('게시글 본문을 입력해 주세요.'); $('#richEditor')?.focus(); return; }
  const newCat=$('#newCategory')?.value.trim();
  let catId=$('#editCategory')?.value || Cats.byName('posts','기타')?.id;
  if(newCat){
@@ -312,7 +321,7 @@ function handleClick(e) {
  const theme=e.target.closest('[data-theme-choice]'); if(theme) {config.theme=theme.dataset.themeChoice;writeConfig();$$('[data-theme-choice]').forEach(el=>{el.classList.toggle('selected',el===theme);el.setAttribute('aria-pressed',String(el===theme));});toast('테마가 변경되었습니다.');return;}
  const font=e.target.closest('[data-font-choice]'); if(font) {if(font.dataset.fontChoice==='custom' && !$('#user-font-style')) {toast('먼저 전용 서체 파일을 등록해 주세요.');$('#customFontInput')?.focus();return;}config.font=font.dataset.fontChoice;writeConfig();$$('[data-font-choice]').forEach(el=>{el.classList.toggle('selected',el===font);el.setAttribute('aria-pressed',String(el===font));});toast('서체가 변경되었습니다.');return;}
  const del=e.target.closest('[data-delete]'); if(del) {deleteArticle(del.dataset.delete);return;}
- const remove=e.target.closest('[data-remove-upload]'); if(remove) {editorFiles=editorFiles.filter(f=>f.id!==remove.dataset.removeUpload);renderUploadList();return;}
+ const remove=e.target.closest('[data-remove-upload]'); if(remove) {inlineController?.removeById(remove.dataset.removeUpload);editorFiles=editorFiles.filter(f=>f.id!==remove.dataset.removeUpload);renderUploadList();return;}
  const tool=e.target.closest('[data-command], [data-block]'); if(tool) {const editor=$('#richEditor');if(!editor)return;editor.focus();if(tool.dataset.block){document.execCommand('formatBlock',false,tool.dataset.block);}else if(tool.dataset.command==='createLink'){const url=prompt('추가할 웹 주소를 입력해 주세요 (https://...)');if(url && /^https?:\/\//i.test(url)) document.execCommand('createLink',false,url);else if(url)toast('http:// 또는 https:// 주소를 사용해 주세요.');}else document.execCommand(tool.dataset.command,false,null);return;}
 }
 async function deleteArticle(id) {
