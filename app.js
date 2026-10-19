@@ -344,13 +344,23 @@ async function saveEditor(published) {
  if(!catNode){toast('카테고리를 선택해 주세요.');return;}
  const cat=catNode.name;
  const tags=Array.from(new Set(($('#editTags')?.value||'').split(',').map(t=>t.trim().slice(0,30)).filter(Boolean))).slice(0,8);
- await Cats.sync();
- const prev=editorId?await getPost(editorId):null;
  const links=($('#editLinks')?.value||'').split(/\n/).map(x=>x.trim()).filter(Boolean).filter(x=>{try {const u=new URL(x);return ['http:','https:'].includes(u.protocol);}catch{return false;}}).slice(0,20);
- const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
  const buttons=[$('#saveDraft'),$('#publishPost')]; buttons.forEach(b=>{if(b)b.disabled=true;});
- try { await putPost(post); editorId=post.id; toast(published?'클라우드에 게시했습니다.':'클라우드에 임시저장했습니다.'); location.hash=published?`#/post/${encodeURIComponent(post.id)}`:`#/write/${encodeURIComponent(post.id)}`; if(!published && location.hash===`#/write/${encodeURIComponent(post.id)}`) await render(); }
- catch(err) {console.error(err);toast('저장 실패: 브라우저 저장 용량을 확인해 주세요.');}
+ try {
+  await Cats.sync();
+  const prev=editorId?await getPost(editorId):null;
+ const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
+  await putPost(post); editorId=post.id; toast(published?'클라우드에 게시했습니다.':'클라우드에 임시저장했습니다.'); location.hash=published?`#/post/${encodeURIComponent(post.id)}`:`#/write/${encodeURIComponent(post.id)}`; if(!published && location.hash===`#/write/${encodeURIComponent(post.id)}`) await render(); }
+ catch(err) {
+  console.error('LIBER cloud save failed',err);
+  const reason=String(err?.message||'알 수 없는 오류').slice(0,250);
+  const help=$('#editorMessage');
+  if(help){
+   help.setAttribute('role','alert');
+   help.textContent='클라우드 저장 실패: '+reason+' — 현재 글은 편집기에 남아 있습니다. 새로고침하지 말고 제목과 본문을 복사해 보관해 주세요.';
+  }
+  toast('저장 실패: '+reason.slice(0,100));
+ }
  finally {buttons.forEach(b=>{if(b)b.disabled=false;});}
 }
 function setupSettings() {
