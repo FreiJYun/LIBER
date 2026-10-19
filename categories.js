@@ -8,7 +8,7 @@ const basic = {
  posts:[{id:'p-philosophy',name:'철학',parentId:null},{id:'p-ethics',name:'윤리학',parentId:'p-philosophy'},{id:'p-history',name:'역사',parentId:null},{id:'p-rome',name:'고대 로마',parentId:'p-history'},{id:'p-reading',name:'독서',parentId:null},{id:'p-technology',name:'기술',parentId:null},{id:'p-life',name:'일상',parentId:null},{id:'p-other',name:'기타',parentId:null}],
  neighbors:[{id:'n-philosophy',name:'철학',parentId:null},{id:'n-history',name:'역사',parentId:null},{id:'n-life',name:'일상',parentId:null},{id:'n-technology',name:'학술·기술',parentId:null},{id:'n-other',name:'기타',parentId:null}]
 };
-let ready=false, publicData=null, data=null, dirty=false, kind='posts', selected='', managerAlert='';
+let ready=false, publicData=null, data=null, dirty=false, kind='posts', selected='', managerAlert='', syncQueue=Promise.resolve();
 function normalizeList(raw) {
  if(!Array.isArray(raw))return [];
  const out=[], seen=new Set();
@@ -39,12 +39,13 @@ function normalize(payload) {
 async function load(){
  if(ready)return;
  let remote=null;
- try{const response=await fetch(DATA_URL,{cache:'no-store'});if(response.ok)remote=await response.json();}catch(e){console.warn('Category JSON unavailable',e);}
+ if(window.LIBERCloud?.ready()) remote=await window.LIBERCloud.listCategories();
+ else {const response=await fetch(DATA_URL,{cache:'no-store'});if(response.ok)remote=await response.json();}
  publicData=normalize(remote);data=structuredClone(publicData);
- try{
-  const cached=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(cached&&cached.posts&&cached.neighbors){data=normalize(cached);dirty=true;}
- }catch(e){console.warn('Category draft error',e);}
+ if(window.LIBERCloud?.isAdmin()){
+  try{const cached=JSON.parse(localStorage.getItem(KEY)||'null');if(cached&&cached.posts&&cached.neighbors){data=normalize(cached);dirty=true;}}
+  catch(e){console.warn('Category draft error',e);}
+ }
  ready=true;
 }
 function list(k){return data?.[KINDS.includes(k)?k:'posts']||[];}
@@ -77,7 +78,20 @@ function filterButtons(k,active='전체'){
  ordered(k).map(x=>'<button type="button" class="filter-chip '+(x.id===active?'active':'')+'" data-category="'+esc(x.id)+'" title="'+esc(breadcrumb(k,x.id))+'" style="--category-depth:'+x.depth+'">'+
  (x.depth?'└ '.repeat(Math.min(x.depth,3)):'')+esc(x.name)+'</button>').join('');
 }
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));dirty=true;}catch(e){alert('카테고리 임시 저장에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.');throw e;}}
+function persist(){
+ const snapshot=JSON.stringify(data);
+ try{localStorage.setItem(KEY,snapshot);dirty=true;}
+ catch(e){alert('카테고리 임시 저장에 실패했습니다.');throw e;}
+ if(window.LIBERCloud?.isAdmin()){
+  syncQueue=syncQueue.catch(()=>{}).then(async()=>{
+   await window.LIBERCloud.saveCategories(JSON.parse(snapshot));
+   if(localStorage.getItem(KEY)===snapshot){
+    localStorage.removeItem(KEY);publicData=normalize(JSON.parse(snapshot));dirty=false;
+   }
+  }).catch(error=>{console.error('Category sync failed',error);managerAlert='클라우드 저장 실패: '+error.message;});
+ }
+}
+function sync(){return syncQueue;}
 function uniqueName(k,name,parentId,exceptId=''){return !list(k).some(x=>x.id!==exceptId&&x.parentId===parentId&&x.name===name);}
 function create(k,name,parentId=null){
  name=String(name||'').trim().slice(0,50);
@@ -142,7 +156,7 @@ async function erase(k,id){
  const parent=item.parentId;
  if(!confirm('“'+item.name+'” 카테고리를 삭제할까요?\n게시글은 상위 카테고리(없으면 기타)로 이동하고 이웃의 해당 분류는 제거됩니다.'))return;
  if(window.LIBERCategoryUsage) await window.LIBERCategoryUsage(k,id,parent,item.name);
- data[k]=list(k).filter(x=>x.id!==id);persist();selected='';managerAlert='카테고리를 삭제했습니다. 공개하려면 JSON 파일을 GitHub에 반영하세요.';
+ data[k]=list(k).filter(x=>x.id!==id);persist();selected='';managerAlert='카테고리 삭제를 Supabase에 반영 중입니다.';
 }
 const alertMessage=message=>{managerAlert=message;};
 function page(){
@@ -151,7 +165,7 @@ function page(){
  const parentOptions='<option value="">최상위 카테고리</option>'+options(kind,item?.parentId||'',exclude);
  return '<section class="page-banner"><div class="container"><div class="eyebrow">CATEGORY ARCHIVE · TAXONOMY</div><h1>카테고리 관리</h1><p>철학·역사·일상에서 더 깊은 하위 분류까지. 글과 이웃을 구분해 자유롭게 정리합니다.</p></div></section>'+
  '<section class="content-section"><div class="container"><div class="category-manager-intro"><p>카테고리는 단계 제한 없이 만들 수 있습니다. 상위 분류를 선택하면 하위 분류까지 함께 조회됩니다.</p>'+
- (dirty?'<p class="neighbor-draft-warning">이 브라우저에 공개되지 않은 카테고리 변경사항이 있습니다. 아래에서 GitHub에 게시해 주세요.</p>':'')+
+ (dirty?'<p class="neighbor-draft-warning">이전 카테고리 초안이 있습니다. 변경 시 Supabase에 저장됩니다.</p>':'')+
  (managerAlert?'<p class="category-feedback" role="status">'+esc(managerAlert)+'</p>':'')+'</div>'+
  '<div class="category-tabs" role="group" aria-label="카테고리 종류"><button type="button" data-category-kind="posts" class="'+(kind==='posts'?'active':'')+'">게시글 카테고리</button><button type="button" data-category-kind="neighbors" class="'+(kind==='neighbors'?'active':'')+'">이웃 카테고리</button></div>'+
  '<div class="category-manager-grid"><section class="panel category-tree-panel"><div class="category-tree-head"><h2>분류 목록</h2><button class="btn btn-sm btn-outline" type="button" id="categoryNewRoot">+ 최상위 추가</button></div>'+
@@ -160,7 +174,7 @@ function page(){
  '<label class="category-label">상위 카테고리<select id="catParent" name="parentId">'+parentOptions+'</select></label>'+
  '<div class="category-actions"><button class="btn" type="submit">'+(item?'변경 저장':'+ 추가')+'</button>'+
  (item?'<button class="btn btn-outline" type="button" id="categoryAddChild">+ 하위 추가</button><button class="btn btn-outline" type="button" id="categoryMoveFirst">⇤ 맨 위로</button><button class="btn btn-outline" type="button" id="categoryMoveUp">↑ 위로</button><button class="btn btn-outline" type="button" id="categoryMoveDown">↓ 아래로</button><button class="btn btn-outline" type="button" id="categoryMoveLast">⇥ 맨 아래로</button><button class="btn btn-outline" type="button" id="categoryDelete">삭제</button>':'')+'</div></form><p class="category-tip">'+(item?esc(breadcrumb(kind,item.id)):'왼쪽에서 분류를 선택해 수정하거나, 이름을 입력해 새 분류를 만드세요.')+'</p></section></div>'+
- '<div class="neighbor-publish category-publish"><h2>카테고리 공개하기</h2><p>카테고리 편집은 우선 현재 브라우저에만 임시 저장됩니다. <strong>모든 방문자에게 공개하려면</strong> JSON을 복사해 GitHub의 <code>categories.json</code> 파일을 교체하고 커밋하세요. 게시글 본문과 이웃 목록은 기존 저장 방식을 유지합니다.</p>'+
+ '<div class="neighbor-publish category-publish"><h2>클라우드 저장 및 백업</h2><p>카테고리 변경은 Supabase에 자동 저장됩니다. JSON 내보내기는 별도 백업용으로 사용하세요.</p>'+
  '<div class="neighbor-form-actions"><button class="btn" type="button" id="categoryCopy">① JSON 복사</button><a class="btn btn-outline" target="_blank" rel="noopener noreferrer" href="https://github.com/FreiJYun/LIBER/edit/main/categories.json">② GitHub 파일 편집 ↗</a><button class="btn btn-outline" type="button" id="categoryDownload">JSON 다운로드</button><button class="btn btn-outline" type="button" id="categoryReset">로컬 변경 취소</button></div></div></div></section>';
 }
 function refresh(){
@@ -180,7 +194,7 @@ function setup(){
  });
  root.querySelector('#categoryManageForm')?.addEventListener('submit',event=>{
   event.preventDefault();const name=root.querySelector('#catName').value.trim(),parentId=root.querySelector('#catParent').value||null;
-  try{if(selected)update(kind,selected,name,parentId);else selected=create(kind,name,parentId).id;notice('이 브라우저에 저장했습니다. 공개하려면 GitHub에 반영해 주세요.');}catch(e){alert(e.message);}
+  try{if(selected)update(kind,selected,name,parentId);else selected=create(kind,name,parentId).id;notice('Supabase에 카테고리 저장을 요청했습니다.');}catch(e){alert(e.message);}
  });
  root.querySelector('#categoryMoveUp')?.addEventListener('click',()=>{move(kind,selected,-1);refresh();});
  root.querySelector('#categoryMoveDown')?.addEventListener('click',()=>{move(kind,selected,1);refresh();});
@@ -223,7 +237,7 @@ function setup(){
   event.preventDefault();
   const rect=row.getBoundingClientRect(),after=event.clientY>rect.top+rect.height/2;
   draggedId=null;
-  if(moveRelative(kind,sourceId,targetId,after)){selected=sourceId;notice('카테고리 순서를 변경했습니다. GitHub에 게시하면 모두에게 반영됩니다.');}
+  if(moveRelative(kind,sourceId,targetId,after)){selected=sourceId;notice('카테고리 순서를 Supabase에 저장 중입니다.');}
   else refresh();
  });
  tree?.addEventListener('dragend',()=>{
@@ -234,7 +248,7 @@ function setup(){
  });
  root.querySelector('#categoryCopy')?.addEventListener('click',async()=>{
   const result=JSON.stringify(data,null,2)+'\n';
-  try{await navigator.clipboard.writeText(result);notice('JSON이 복사되었습니다. GitHub의 categories.json 전체 내용을 교체해 주세요.');}
+  try{await navigator.clipboard.writeText(result);notice('JSON이 복사되었습니다. 필요할 때 JSON을 백업으로 보관해 주세요.');}
   catch{notice('복사할 수 없습니다. JSON 다운로드를 이용해 주세요.');}
  });
  root.querySelector('#categoryDownload')?.addEventListener('click',()=>{
@@ -246,6 +260,6 @@ function setup(){
   localStorage.removeItem(KEY);data=structuredClone(publicData);dirty=false;selected='';notice('공개 카테고리 목록으로 복원했습니다.');
  });
 }
-window.LIBERCategories={load,page,setup,list,ordered,find,ancestry,breadcrumb,descendants,byName,postId,postName,postMatches,options,filterButtons,create,isDirty:()=>dirty,
+window.LIBERCategories={load,page,setup,sync,list,ordered,find,ancestry,breadcrumb,descendants,byName,postId,postName,postMatches,options,filterButtons,create,isDirty:()=>dirty,
  neighborsMatch:(ids,catId)=>catId==='전체'||!catId||(Array.isArray(ids)&&ids.some(id=>descendants('neighbors',catId).has(id)))};
 })();
