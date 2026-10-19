@@ -61,22 +61,32 @@ function ensureAdmin(){
  if(!admin)throw Error('관리자 권한이 없습니다. 관리자 로그인 후 다시 시도해 주세요.');
 }
 async function optimizeImage(blob){
- if(!blob?.type?.startsWith('image/')||blob.type==='image/gif'||blob.size<1200000)return blob;
- if(typeof createImageBitmap!=='function')return blob;
+ if(!blob?.type?.startsWith('image/'))return blob;
+ const heic=/^image\/(heic|heif)$/i.test(blob.type);
+ if(blob.type==='image/gif'||(!heic&&blob.size<500*1024))return blob;
+ if(typeof createImageBitmap!=='function'){
+  if(heic)throw Error('HEIC/HEIF 사진은 이 브라우저에서 변환할 수 없습니다. JPG 또는 PNG로 변환해 올려 주세요.');
+  return blob;
+ }
  try{
   const bitmap=await createImageBitmap(blob);
-  const maxSize=2048;
-  const scale=Math.min(1,maxSize/Math.max(bitmap.width,bitmap.height));
-  if(scale===1 && blob.size<2500000){bitmap.close?.();return blob;}
+  const scale=Math.min(1,2048/Math.max(bitmap.width,bitmap.height));
+  if(scale===1&&!heic&&blob.size<950*1024){bitmap.close?.();return blob;}
   const canvas=document.createElement('canvas');
   canvas.width=Math.max(1,Math.round(bitmap.width*scale));
   canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-  canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+  const context=canvas.getContext('2d');
+  if(!context){bitmap.close?.();throw Error('이미지 변환용 Canvas를 사용할 수 없습니다.');}
+  context.drawImage(bitmap,0,0,canvas.width,canvas.height);
   bitmap.close?.();
-  const compressed=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.84));
-  if(compressed&&compressed.size<blob.size)return compressed;
+  const compressed=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.84));
+  if(!compressed){if(heic)throw Error('이 브라우저가 HEIC 사진을 WebP로 변환하지 못했습니다.');return blob;}
+  return heic||compressed.size<blob.size?compressed:blob;
+ }catch(err){
+  if(heic)throw Error('HEIC/HEIF 사진을 열 수 없습니다. JPG 또는 PNG로 변환해 올려 주세요.');
+  console.warn('Image conversion failed, retaining original',err);
   return blob;
- }catch(e){console.warn('Image conversion failed',e);return blob;}
+ }
 }
 async function ensurePostCategory(categoryId){
  if(!categoryId)return null;
@@ -104,13 +114,15 @@ async function ensurePostCategory(categoryId){
  }
  return id;
 }
-async function savePost(p){
+async function savePost(p,onProgress){
  ensureAdmin();
  const verifiedCategoryId=await ensurePostCategory(p.categoryId);
  const previous=check(await client.from('liber_posts').select('attachments').eq('id',String(p.id)).maybeSingle());
  const previousPaths=(Array.isArray(previous?.attachments)?previous.attachments:[]).map(a=>a.storagePath).filter(Boolean);
  const uploads=[];
  const attachments=[];
+ const totalNew=(p.attachments||[]).filter(a=>!a.storagePath&&a.blob).length;
+ let completedNew=0;
  try{
   for(const a of p.attachments||[]){
    if(a.storagePath){
@@ -118,16 +130,21 @@ async function savePost(p){
     continue;
    }
    if(!a.blob)continue;
+   onProgress?.('첨부파일 '+(completedNew+1)+'/'+totalNew+' 준비 중: '+String(a.name||'사진'));
    let blob=await optimizeImage(a.blob);
-   if(blob.size>50*1024*1024)throw Error('파일당 업로드 제한은 50MB입니다. 큰 동영상은 외부 링크를 이용해 주세요.');
+   if(blob.size>50*1024*1024)throw Error('「'+String(a.name||'첨부파일')+'」이 50MB를 넘습니다. 사진은 용량을 줄이고, 큰 동영상은 외부 링크를 이용해 주세요.');
    const type=blob.type||a.type;
    const valid=['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm'];
-   if(!valid.includes(type))throw Error('업로드 형식을 지원하지 않습니다: '+type);
+   if(!valid.includes(type))throw Error('「'+String(a.name||'첨부파일')+'」의 형식을 지원하지 않습니다. 사진은 JPG·PNG·WebP·GIF, 동영상은 MP4·WebM을 사용해 주세요.');
    const extension={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','video/mp4':'mp4','video/webm':'webm'}[type];
    const postId=String(p.id).replace(/[^a-zA-Z0-9_-]/g,'_');
    const mediaId=String(a.id).replace(/[^a-zA-Z0-9_-]/g,'_');
    const storagePath='posts/'+postId+'/'+mediaId+'-'+Date.now()+'.'+extension;
-   check(await client.storage.from(bucket).upload(storagePath,blob,{contentType:type,upsert:false,cacheControl:'3600'}));
+   onProgress?.('첨부파일 '+(completedNew+1)+'/'+totalNew+' 업로드 중: '+String(a.name||'사진'));
+   const uploaded=await client.storage.from(bucket).upload(storagePath,blob,{contentType:type,upsert:false,cacheControl:'3600'});
+   if(uploaded.error)throw Error('「'+String(a.name||'첨부파일')+'」 업로드 실패: '+(uploaded.error.message||'저장소 요청 오류'));
+   completedNew++;
+   onProgress?.('첨부파일 '+completedNew+'/'+totalNew+' 업로드 완료');
    uploads.push(storagePath);
    attachments.push({id:String(a.id),name:String(a.name||'첨부파일').slice(0,200),type,storagePath});
   }
@@ -140,6 +157,7 @@ async function savePost(p){
    created_at:new Date(p.createdAt||Date.now()).toISOString(),
    updated_at:new Date().toISOString()
   };
+  onProgress?.('게시글과 사진 정보를 데이터베이스에 저장 중...');
   check(await client.from('liber_posts').upsert(row,{onConflict:'id'}));
   const keep=new Set(attachments.map(x=>x.storagePath));
   const stale=previousPaths.filter(path=>!keep.has(path));
