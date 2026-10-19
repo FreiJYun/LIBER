@@ -1,10 +1,10 @@
-/* LIBER — one-way external blogroll. Published entries live in neighbors.json. */
+/* LIBER — public neighbor links live in Supabase; JSON is a legacy backup. */
 (() => {
   'use strict';
   const Cats = window.LIBERCategories;
   const DATA_URL = './neighbors.json';
   const DRAFT_KEY = 'liber_neighbors_draft_v1';
-  const EDIT_URL = 'https://github.com/FreiJYun/LIBER/edit/main/neighbors.json';
+  const EDIT_URL = 'https://supabase.com/dashboard/project/muwvbthekagigehnywjx/editor';
   let published = [], entries = [], loaded = false, hasDraft = false;
   let filter = '전체', topicFilter = '전체', query = '', editingId = null, managerOpen = false;
 
@@ -161,7 +161,7 @@
       formHtml() + '<div class="neighbor-publish"><h3>백업 및 클라우드</h3>' +
       '<p>변경사항은 Supabase 데이터베이스에 자동으로 반영됩니다. JSON 내보내기는 백업용입니다.</p>' +
       '<div class="neighbor-form-actions"><button type="button" class="btn" id="neighborCopy">① 목록 JSON 복사</button>' +
-      '<a class="btn btn-outline" href="' + EDIT_URL + '" target="_blank" rel="noopener noreferrer">② GitHub 파일 편집 ↗</a>' +
+      '<a class="btn btn-outline" href="' + EDIT_URL + '" target="_blank" rel="noopener noreferrer">② Supabase 목록 확인 ↗</a>' +
       '<button type="button" class="btn btn-outline" id="neighborDownload">JSON 다운로드</button>' +
       '<button type="button" class="btn btn-outline" id="neighborReset">이 브라우저의 변경 취소</button></div>' +
       '<p class="neighbor-note">방문자는 이웃 목록을 읽기만 할 수 있으며 관리자만 수정할 수 있습니다.</p>' +
@@ -215,7 +215,7 @@
       const del = event.target.closest('[data-neighbor-delete]');
       if (del) {
         const item = entries.find(x => x.id === del.dataset.neighborDelete);
-        if (item && confirm('“' + item.name + '” 이웃을 이 브라우저의 목록에서 삭제할까요?')) {
+        if (item && confirm('“' + item.name + '” 이웃을 Supabase 이웃 목록에서 삭제할까요?')) {
           entries = entries.filter(x => x.id !== item.id); saveDraft(); refresh(); flash('이웃을 삭제했습니다. 클라우드에 반영 중입니다.');
         }
         return;
@@ -223,7 +223,7 @@
       if (event.target.closest('#neighborCancelEdit')) { editingId=null; managerOpen=true;refresh();return; }
       if (event.target.closest('#neighborCopy')) {
         const json = JSON.stringify(entries,null,2) + '\n';
-        try { await navigator.clipboard.writeText(json); flash('JSON이 복사되었습니다. GitHub에서 기존 내용을 모두 교체해 주세요.'); }
+        try { await navigator.clipboard.writeText(json); flash('JSON이 복사되었습니다. 백업용 JSON으로 보관해 주세요.'); }
         catch { flash('복사할 수 없습니다. JSON 다운로드 버튼을 사용해 주세요.'); }
         return;
       }
@@ -235,10 +235,10 @@
         return;
       }
       if (event.target.closest('#neighborReset')) {
-        if (!confirm('이 브라우저에서 편집한 이웃 목록을 버리고 GitHub 공개 목록으로 돌아갈까요?')) return;
+        if (!confirm('이 브라우저에서 편집한 이웃 목록을 버리고 Supabase에서 불러온 목록으로 돌아갈까요?')) return;
         localStorage.removeItem(DRAFT_KEY);
         entries = published.slice(); hasDraft = false; editingId=null; filter='전체'; topicFilter='전체'; query='';
-        refresh(); flash('GitHub 공개 이웃 목록으로 되돌렸습니다.');
+        refresh(); flash('클라우드 공개 이웃 목록으로 되돌렸습니다.');
       }
     });
     root.querySelector('#neighborForm')?.addEventListener('submit', event => {
