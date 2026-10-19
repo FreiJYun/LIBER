@@ -50,28 +50,35 @@
     });
   }
   async function load() {
-    if (loaded) return;
-    try {
-      const response = await fetch(DATA_URL, {cache:'no-store'});
-      if (!response.ok) throw Error('이웃 목록 요청 실패');
-      const data = await response.json();
-      published = normalize(data);
-    } catch (error) {
-      published = [];
-      console.warn('LIBER neighbors: public list unavailable (local file mode may block fetch)',error);
+    if (loaded)return;
+    if(window.LIBERCloud?.ready()){
+      published=normalize(await window.LIBERCloud.neighbors());
+      entries=published.slice();
+    }else{
+      try{const response=await fetch(DATA_URL,{cache:'no-store'});published=normalize(response.ok?await response.json():[]);}catch{published=[];}
+      entries=published.slice();
     }
-    try {
-      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-      if (saved && Array.isArray(saved.items)) {
-        entries = normalize(saved.items);
-        hasDraft = true;
-      } else entries = published.slice();
-    } catch { entries = published.slice(); }
-    loaded = true;
+    if(window.LIBERCloud?.isAdmin()){
+      try{
+        const draft=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null');
+        if(draft?.items && Array.isArray(draft.items)){entries=normalize(draft.items);hasDraft=true;}
+      }catch{}
+    }
+    loaded=true;
   }
+  let syncQueue=Promise.resolve();
   function saveDraft() {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({items:entries,updatedAt:new Date().toISOString()}));
-    hasDraft = true;
+    const snapshot=JSON.stringify({items:entries,updatedAt:new Date().toISOString()});
+    localStorage.setItem(DRAFT_KEY,snapshot);hasDraft=true;
+    if(window.LIBERCloud?.isAdmin()){
+      syncQueue=syncQueue.catch(()=>{}).then(async()=>{
+        await window.LIBERCloud.saveNeighbors(JSON.parse(snapshot).items);
+        if(localStorage.getItem(DRAFT_KEY)===snapshot){
+          localStorage.removeItem(DRAFT_KEY);
+          published=entries.slice();hasDraft=false;
+        }
+      }).catch(error=>{console.error('Neighbors cloud sync failed',error);flash('이웃 목록 저장 실패: '+error.message);});
+    }
   }
   function flash(message) {
     const el = document.querySelector('#toast');
@@ -96,7 +103,7 @@
       ((item.categories||[]).length ? '<div class="neighbor-topics">' + item.categories.filter(id=>Cats.find('neighbors',id)).slice(0,3).map(id=>'<span>'+esc(Cats.breadcrumb('neighbors',id))+'</span>').join('')+'</div>' : '') +
       (item.description ? '<span class="neighbor-desc">' + esc(item.description) + '</span>' : '') +
       '<span class="neighbor-visit">블로그 방문 ↗</span></a>' +
-      '<div class="neighbor-card-tools">' +
+      (window.LIBERCloud?.isAdmin() ? '<div class="neighbor-card-tools">' : '<div class="neighbor-card-tools" hidden>') +
       '<button type="button" data-neighbor-edit="' + esc(item.id) + '" title="이 기기에서 편집">편집</button>' +
       '<button type="button" data-neighbor-delete="' + esc(item.id) + '" title="이 기기의 목록에서 삭제">삭제</button>' +
       '</div></article>';
@@ -141,23 +148,23 @@
       '<section class="content-section"><div class="container">' +
       '<div class="neighbor-intro"><div><div class="eyebrow">MY NEIGHBORS</div><h2>함께 읽는 블로그</h2>' +
       '<p>프로필을 누르면 해당 네이버 블로그·티스토리·개인 홈페이지로 이동합니다.</p></div>' +
-      '<button class="btn btn-outline" type="button" id="neighborOpenManager">+ 이웃 등록·관리</button></div>' +
-      (hasDraft ? '<p class="neighbor-draft-warning">현재 보이는 목록에 이 브라우저의 미공개 변경사항이 포함되어 있습니다. 다른 방문자에게 보여 주려면 아래에서 GitHub에 게시하세요.</p>' : '') +
+      (window.LIBERCloud?.isAdmin()?'<button class="btn btn-outline" type="button" id="neighborOpenManager">+ 이웃 등록·관리</button>':'')+'</div>' +
+      (hasDraft ? '<p class="neighbor-draft-warning">이 브라우저에 이전 이웃 목록 초안이 있습니다. 관리자 변경 시 Supabase에 저장됩니다.</p>' : '') +
       '<div class="neighbor-toolbar"><div class="filter-chips" id="neighborFilters">' + filtersHtml() + '</div>' +
       '<label class="neighbor-topic-filter">주제별 보기 <select id="neighborTopicFilter"><option value="전체">모든 주제</option>'+
       Cats.options('neighbors',topicFilter)+'</select></label>' +
       '<input id="neighborSearch" class="neighbor-search" type="search" placeholder="이웃 이름·소개 검색" aria-label="이웃 검색" value="' + esc(query) + '" /></div>' +
       '<div id="neighborCards">' + gridHtml() + '</div>' +
-      '<details class="neighbor-manager" id="neighborManager" ' + (managerOpen ? 'open' : '') + '>' +
+      (window.LIBERCloud?.isAdmin()?'<details class="neighbor-manager" id="neighborManager" ' + (managerOpen ? 'open' : '') + '>':'<details class="neighbor-manager" id="neighborManager" hidden>') +
       '<summary>이웃 목록 관리 · 저장 및 공개 안내</summary>' +
-      '<div class="neighbor-manager-body"><p>여기서 추가·수정·삭제하면 우선 <strong>이 브라우저에만 임시 저장</strong>됩니다. 공개 블로그에 반영하려면 목록 파일을 GitHub에 게시해야 합니다. 이 화면 자체에는 관리자 로그인이 없습니다.</p>' +
-      formHtml() + '<div class="neighbor-publish"><h3>모든 방문자에게 공개하기</h3>' +
-      '<p>아래에서 JSON을 복사한 다음 GitHub의 <code>neighbors.json</code> 파일 내용을 교체하고 <strong>Commit changes</strong>를 누르세요. 그러면 GitHub Pages에서 공개 목록이 갱신됩니다.</p>' +
+      '<div class="neighbor-manager-body"><p>이웃 목록을 추가·수정·삭제하면 Supabase에 자동으로 저장됩니다. 관리자 권한이 필요합니다.</p>' +
+      formHtml() + '<div class="neighbor-publish"><h3>백업 및 클라우드</h3>' +
+      '<p>변경사항은 Supabase 데이터베이스에 자동으로 반영됩니다. JSON 내보내기는 백업용입니다.</p>' +
       '<div class="neighbor-form-actions"><button type="button" class="btn" id="neighborCopy">① 목록 JSON 복사</button>' +
       '<a class="btn btn-outline" href="' + EDIT_URL + '" target="_blank" rel="noopener noreferrer">② GitHub 파일 편집 ↗</a>' +
       '<button type="button" class="btn btn-outline" id="neighborDownload">JSON 다운로드</button>' +
       '<button type="button" class="btn btn-outline" id="neighborReset">이 브라우저의 변경 취소</button></div>' +
-      '<p class="neighbor-note">주의: 방문자가 수정해도 공개 목록은 바뀌지 않습니다. GitHub 저장소에 커밋할 권한이 있는 사람만 실제 이웃 목록을 게시할 수 있습니다.</p>' +
+      '<p class="neighbor-note">방문자는 이웃 목록을 읽기만 할 수 있으며 관리자만 수정할 수 있습니다.</p>' +
       '</div></div></details></div></section></section>';
   }
   async function homePreview() {
@@ -209,7 +216,7 @@
       if (del) {
         const item = entries.find(x => x.id === del.dataset.neighborDelete);
         if (item && confirm('“' + item.name + '” 이웃을 이 브라우저의 목록에서 삭제할까요?')) {
-          entries = entries.filter(x => x.id !== item.id); saveDraft(); refresh(); flash('이 브라우저에서 삭제했습니다. GitHub에 게시해야 전체 공개 목록이 바뀝니다.');
+          entries = entries.filter(x => x.id !== item.id); saveDraft(); refresh(); flash('이웃을 삭제했습니다. 클라우드에 반영 중입니다.');
         }
         return;
       }
@@ -249,7 +256,7 @@
       else entries.push(item);
       editingId=null; managerOpen=true; filter='전체'; topicFilter='전체'; query='';
       saveDraft();refresh();
-      flash('이웃을 저장했습니다. 전체 공개하려면 GitHub에 목록을 게시해 주세요.');
+      flash('이웃을 저장했습니다. 클라우드에 반영 중입니다.');
     });
     // Invalid external avatar URLs show the monogram instead.
     root.addEventListener('error', event => {
