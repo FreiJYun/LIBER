@@ -80,6 +80,8 @@ async function optimizeImage(blob){
 }
 async function savePost(p){
  ensureAdmin();
+ const previous=check(await client.from('liber_posts').select('attachments').eq('id',String(p.id)).maybeSingle());
+ const previousPaths=(Array.isArray(previous?.attachments)?previous.attachments:[]).map(a=>a.storagePath).filter(Boolean);
  const uploads=[];
  const attachments=[];
  try{
@@ -112,6 +114,9 @@ async function savePost(p){
    updated_at:new Date().toISOString()
   };
   check(await client.from('liber_posts').upsert(row,{onConflict:'id'}));
+  const keep=new Set(attachments.map(x=>x.storagePath));
+  const stale=previousPaths.filter(path=>!keep.has(path));
+  if(stale.length)try{check(await client.storage.from(bucket).remove(stale));}catch(error){console.warn('Old media cleanup pending',error);}
   return mapPost({...row});
  }catch(err){
   if(uploads.length)await client.storage.from(bucket).remove(uploads).catch(()=>{});
@@ -120,8 +125,11 @@ async function savePost(p){
 }
 async function deletePost(id){
  ensureAdmin();
- // Do not delete media during the DB operation: a failed deletion must not leave a broken post.
+ const existing=check(await client.from('liber_posts').select('attachments').eq('id',id).maybeSingle());
+ const paths=(Array.isArray(existing?.attachments)?existing.attachments:[]).map(a=>a.storagePath).filter(Boolean);
+ // Delete the database row first to avoid leaving a visible post with broken images.
  check(await client.from('liber_posts').delete().eq('id',id));
+ if(paths.length)try{check(await client.storage.from(bucket).remove(paths));}catch(error){console.warn('Media cleanup pending',error);}
 }
 async function listCategories(){
  const rows=check(await client.from('liber_categories').select('id,kind,name,parent_id,sort_order').order('sort_order',{ascending:true}).limit(1000));
