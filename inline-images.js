@@ -121,8 +121,11 @@
       }
       let count=0;
       for(const file of files){
-        if(!/^image\//.test(file.type)||file.size>30*1024*1024){
-          notify('사진은 이미지 형식이며 30MB 이하여야 합니다.');continue;
+        if(!['image/jpeg','image/png','image/webp','image/gif','image/heic','image/heif'].includes(file.type)){
+          notify('JPG·PNG·WebP·GIF 사진 또는 변환 가능한 HEIC 사진을 선택해 주세요.');continue;
+        }
+        if(file.size>50*1024*1024){
+          notify('본문 사진은 파일당 50MB 이하여야 합니다.');continue;
         }
         const id=makeId();
         attachments().push({id,name:file.name,type:file.type,blob:file});
