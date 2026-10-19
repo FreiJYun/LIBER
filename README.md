@@ -57,7 +57,7 @@ LIBER는 **GitHub Pages(화면) + Supabase(게시글·카테고리·이웃·설�
 
 - 관리자는 **설정 → 클라우드 백업**에서 글·첨부 미디어·분류·이웃을 JSON으로 내려받을 수 있습니다. 다수의 사진·동영상은 큰 파일을 만들 수 있습니다.
 - **설정 → 백업 복원**은 파일을 서버로 되돌립니다. 동일한 글 ID가 있으면 덮어씁니다. 주의해서 사용하세요.
-- Google Drive 백업 자동 전송, 자동 스냅샷, 도메인 인증은 아직 구현하지 않았습니다.
+- Google Drive **원본 사진 백업**: 관리자가 설정 → Google Drive에서 Google 로그인/동의를 마친 뒤, 글쓰기에서 새 사진과 함께 게시 또는 임시저장할 때 원본 사진을 Google Drive에 백업합니다. 브라우저를 닫은 상태의 자동 백업 및 서버 스냅샷은 아직 구현되지 않았습니다.
 - 로컬 서체 파일은 브라우저에서 별도로 보관됩니다.
 
 ## 이전 버전에서 달라진 점
@@ -73,6 +73,7 @@ LIBER는 **GitHub Pages(화면) + Supabase(게시글·카테고리·이웃·설�
 - `index.html`, `styles.css`: 로마풍 레이아웃
 - `app.js`: 홈페이지·게시글·글쓰기·백업
 - `liber-cloud.js`: Supabase 읽기·쓰기·인증·미디어 업로드
+- `liber-drive.js`: Google Identity Services 인증 및 Drive API 원본 사진 백업
 - `categories.js`: 계층형 카테고리
 - `neighbors.js`: 이웃 블로그
 - `journal-sidebar.js`: 트리 탐색
@@ -96,3 +97,14 @@ LIBER는 **GitHub Pages(화면) + Supabase(게시글·카테고리·이웃·설�
 - 블로그에서는 최적화된 공개용 사진을 전달합니다. Google Drive 100GB와 자동 연동된 상태는 아니므로, **고화질 원본은 사용자가 Google Drive에 별도로 백업**해야 합니다.
 - Supabase Free Storage 한도는 조직 합산 1GB이며 실제 사용량은 Supabase Dashboard에서 확인하세요. 공개 Storage 버킷은 파일 URL을 알고 있으면 접근 가능한 방식이므로 민감하거나 비공개로 보관할 사진은 올리지 마세요.
 - 운영 검증: JPG 한 장을 첨부한 시험 게시글을 공개한 다음, 로그인하지 않은 시크릿 창에서 본문 이미지가 정상 로드되는지 확인하세요. 이미지 파일 사용량도 Supabase Storage에서 확인합니다.
+
+## Google Drive 원본 사진 백업 (2026-10-20)
+
+1. Google Cloud의 LIBER 프로젝트에서 Google Drive API와 `drive.file` 권한을 설정하고, 테스트 사용자 등록 및 웹 클라이언트의 허용된 JavaScript 원본(`https://freijyun.github.io`)을 등록합니다.
+2. 관리자로 LIBER **설정 → Google Drive**에 들어가 **Google Drive 연결하기**를 누르고 본인의 Google 계정을 선택해 권한을 허용합니다.
+3. **새 사진**을 본문 또는 첨부에 넣고 게시/임시저장하면, Supabase에 게시글을 저장한 뒤 Google Drive의 `LIBER - 원본 사진 백업/post-<게시글ID>` 폴더에 파일 원본을 백업합니다. 사진이 5MB를 초과하면 Google Drive resumable 업로드를 사용합니다.
+4. Drive 업로드 중 오류가 발생하면 **Supabase 글 저장 성공 / Google Drive 원본 백업 실패**를 분리해서 표시합니다. 편집기에서 원본 사진을 유지하면서 재시도할 수 있습니다. Drive 백업이 켜져 있으나 인증이 만료됐다면 게시 전에 재연결하도록 요구합니다.
+5. 원본과 공개용 파일은 분리됩니다. 서버에 **Google 액세스 토큰, refresh token, client secret을 저장하지 않습니다.** 토큰은 브라우저 탭의 메모리에만 두며, 재방문/만료 때에는 다시 연결해야 합니다.
+6. 이 기능은 **연결한 브라우저에서 새로 첨부한 원본 사진**에만 적용됩니다. 이미 Supabase에 게시한 기존 사진의 원본은 자동 복구할 수 없습니다. 동영상 원본, 매일 정기 실행, 서버 측 자동 동기화, 과거 사진 일괄 원본 백업은 대상이 아닙니다.
+7. `Google Drive 연결 해제`는 현재 연결을 해제하고 가능한 경우 OAuth 권한을 취소합니다. 연결하지 않으면 게시글과 공개용 사진은 기존대로 Supabase에 정상 저장되지만 Google 원본 백업은 되지 않습니다.
+
