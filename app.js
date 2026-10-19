@@ -387,40 +387,101 @@ async function deleteArticle(id) {
 }
 function blobToDataURL(blob) { return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});}
 function dataURLtoBlob(s) { if(typeof s!=='string'||!s.startsWith('data:'))throw Error('잘못된 미디어 데이터');const [head,base64]=s.split(',');const mime=(head.match(/^data:([^;]+);base64$/)||[])[1];if(!mime||!base64)throw Error('첨부 파일 형식 오류');const raw=atob(base64);const arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);return new Blob([arr],{type:mime}); }
-async function exportBackup() {
- try {
-  const posts=await allPosts(), asset=await assetGet('customFont');
-  const totalSize=posts.flatMap(p=>p.attachments||[]).reduce((s,x)=>s+(x.blob?.size||0),0);
-  if(totalSize>100*1024*1024 && !confirm(`첨부 용량이 약 ${(totalSize/1048576).toFixed(1)}MB입니다. 백업 JSON은 이보다 더 커질 수 있습니다. 계속할까요?`)) return;
-  toast('백업 파일을 준비하고 있습니다.');
-  const packed=[];
-  for(const post of posts){const cp={...post,attachments:[]};for(const a of post.attachments||[])cp.attachments.push({id:a.id,name:a.name,type:a.type,data:a.blob?await blobToDataURL(a.blob):null});packed.push(cp);}
+
+async function exportBackup(){
+ if(!Cloud.isAdmin()){toast('관리자 인증이 필요합니다.');location.hash='#/admin';return;}
+ if(!confirm('클라우드의 게시글과 사진을 하나의 JSON 백업으로 내려받을까요? 용량과 다운로드 시간이 클 수 있습니다.'))return;
+ try{
+  const posts=await allPosts(true),categories=await Cloud.listCategories(),neighbors=await Cloud.neighbors();
+  const identity=await Cloud.siteIdentity();
+  const asset=await assetGet('customFont'),packed=[];
+  toast('클라우드 미디어를 포함해 백업을 준비하고 있습니다.');
+  for(const post of posts){
+   const cp={...post,attachments:[]};
+   for(const a of post.attachments||[]){
+    let blob=a.blob;
+    if(!blob && a.remoteUrl){
+     const response=await fetch(a.remoteUrl);
+     if(!response.ok)throw Error('사진 다운로드 실패: '+a.name);
+     blob=await response.blob();
+    }
+    if(!blob)throw Error('첨부파일을 백업할 수 없습니다: '+a.name);
+    cp.attachments.push({id:a.id,name:a.name,type:a.type,data:await blobToDataURL(blob)});
+   }
+   packed.push(cp);
+  }
   const packedFont=asset?.blob?{name:asset.name,data:await blobToDataURL(asset.blob)}:null;
-  const json=JSON.stringify({format:'LIBER-BACKUP',version:1,createdAt:new Date().toISOString(),config,posts:packed,customFont:packedFont},null,2);
+  const json=JSON.stringify({format:'LIBER-BACKUP',version:1,createdAt:new Date().toISOString(),config:{...config,...(identity||{})},posts:packed,categories,neighbors,customFont:packedFont},null,2);
   const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
-  const a=document.createElement('a');a.href=url;a.download=`LIBER-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);toast('백업 파일 다운로드를 시작했습니다.');
- }catch(err){console.error(err);toast('백업 생성에 실패했습니다.');}
+  const a=document.createElement('a');a.href=url;a.download='LIBER-cloud-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast('글과 첨부 미디어를 포함한 백업 다운로드를 시작했습니다.');
+ }catch(err){console.error(err);alert('백업 생성 실패: '+err.message+' — 불완전한 파일은 저장하지 않았습니다.');}
 }
-async function importBackup(e) {
+async function importBackup(e){
  const file=e.target.files?.[0];e.target.value='';if(!file)return;
- if(!confirm('백업을 복원하시겠습니까? 동일한 ID의 기존 글은 백업 내용으로 대체됩니다.'))return;
- try {
-  const data=JSON.parse(await file.text()); if(data.format!=='LIBER-BACKUP'||data.version!==1||!Array.isArray(data.posts)) throw Error('LIBER 백업 형식이 아닙니다.');
-  if(data.posts.length>3000) throw Error('게시글 수가 너무 많습니다.');
-  let count=0;
-  for(const p of data.posts){if(!p.id||typeof p.title!=='string'||typeof p.body!=='string')continue;
+ if(!Cloud.isAdmin()){toast('관리자 인증이 필요합니다.');location.hash='#/admin';return;}
+ if(!confirm('백업 데이터를 클라우드에 복원할까요? 동일한 게시글 ID는 덮어쓰며, 이전 카테고리·이웃 목록도 복원될 수 있습니다.'))return;
+ let count=0;
+ try{
+  const data=JSON.parse(await file.text());
+  if(data.format!=='LIBER-BACKUP'||data.version!==1||!Array.isArray(data.posts))throw Error('LIBER 백업 형식이 아닙니다.');
+  if(data.posts.length>3000)throw Error('게시글이 너무 많습니다.');
+  if(data.categories?.posts&&data.categories?.neighbors){
+   await Cloud.saveCategories(data.categories);
+   // Category screen will load fresh data on next page refresh.
+  }
+  if(Array.isArray(data.neighbors))await Cloud.saveNeighbors(data.neighbors);
+  const serverCategories=await Cloud.listCategories();
+  const ids=new Set(serverCategories.posts.map(x=>x.id));
+  for(const p of data.posts){
+   if(!p.id||typeof p.title!=='string'||typeof p.body!=='string')continue;
    const attaches=[];
-   for(const a of (Array.isArray(p.attachments)?p.attachments:[])) {
-    if(!a.data)continue; const blob=dataURLtoBlob(a.data);if(!/^(image|video)\//.test(blob.type))continue;
+   for(const a of Array.isArray(p.attachments)?p.attachments:[]){
+    if(!a.data)continue;
+    const blob=dataURLtoBlob(a.data);
+    if(!/^(image|video)\//.test(blob.type))continue;
     attaches.push({id:String(a.id||uid()),name:String(a.name||'첨부 파일').slice(0,200),type:blob.type,blob});
    }
-   await putPost({id:String(p.id),title:p.title.slice(0,160),subtitle:String(p.subtitle||'').slice(0,250),category:String(p.category||'기타').slice(0,50),categoryId:Cats.find('posts',String(p.categoryId||''))?.id||Cats.byName('posts',p.category)?.id||'',tags:Array.isArray(p.tags)?p.tags.map(x=>String(x).trim().slice(0,30)).filter(Boolean).slice(0,8):[],body:sanitizeHTML(p.body),createdAt:Number(p.createdAt)||Date.now(),updatedAt:Number(p.updatedAt)||Date.now(),published:p.published!==false,demo:p.demo===true,links:Array.isArray(p.links)?p.links.filter(x=>typeof x==='string'&&/^https?:\/\//i.test(x)).slice(0,20):[],attachments:attaches});count++;
+   const categoryId=ids.has(p.categoryId)?p.categoryId:null;
+   await putPost({
+    id:String(p.id),title:p.title.slice(0,160),subtitle:String(p.subtitle||'').slice(0,250),
+    category:String(p.category||'기타').slice(0,50),categoryId,
+    tags:Array.isArray(p.tags)?p.tags.slice(0,8):[],
+    body:sanitizeHTML(p.body),createdAt:Number(p.createdAt)||Date.now(),
+    updatedAt:Date.now(),published:p.published!==false,demo:p.demo===true,
+    links:Array.isArray(p.links)?p.links.filter(x=>typeof x==='string'&&/^https?:\/\//i.test(x)).slice(0,20):[],
+    attachments:attaches
+   });count++;
   }
-  if(data.customFont?.data){const blob=dataURLtoBlob(data.customFont.data);await assetPut({id:'customFont',name:String(data.customFont.name||'custom-font'),blob});}
-  if(data.config&&typeof data.config==='object')config={...defaults,...Object.fromEntries(Object.entries(data.config).filter(([k])=>k in defaults))};
-  writeConfig();await applyConfig();toast(`${count}개 글을 복원했습니다.`);await render();
- }catch(err){console.error(err);toast(`복원 실패: ${err.message}`);}
+  if(data.customFont?.data)await assetPut({id:'customFont',name:String(data.customFont.name||'custom-font'),blob:dataURLtoBlob(data.customFont.data)});
+  if(data.config){
+   const identity=Object.fromEntries(Object.entries(data.config).filter(([k])=>['title','tagline','heroTitle','heroDescription','about'].includes(k)));
+   await Cloud.saveSiteIdentity(identity);
+  }
+  toast(count+'개 글의 복원을 완료했습니다.');await render();
+ }catch(err){console.error(err);alert(count+'개 이전 후 복원 중 오류가 발생했습니다: '+err.message);}
 }
+async function migrateLocalPosts(){
+ if(!Cloud.isAdmin()){toast('관리자 인증이 필요합니다.');location.hash='#/admin';return;}
+ const locals=(await localAllPosts()).filter(p=>!p.demo);
+ if(!locals.length){toast('이 브라우저에 이전할 실제 게시글이 없습니다.');return;}
+ if(!confirm('이 브라우저에서 작성한 '+locals.length+'개 게시글을 Supabase에 임시저장 상태로 복사할까요? 로컬 원본은 삭제하지 않습니다.'))return;
+ let count=0,skipped=0;
+ try{
+  const cats=await Cloud.listCategories();
+  const ids=new Set(cats.posts.map(x=>x.id));
+  for(const p of locals){
+   if(await Cloud.post(p.id)){skipped++;continue;}
+   await Cloud.savePost({...p,categoryId:ids.has(p.categoryId)?p.categoryId:null,published:false});
+   count++;
+  }
+  alert('로컬 게시글 '+count+'개를 클라우드 임시저장으로 복사했습니다. 중복 '+skipped+'개는 건너뛰었습니다. 관리자로 글을 확인한 뒤 공개하세요. 로컬 원본은 그대로 남아 있습니다.');
+  await render();
+ }catch(err){console.error(err);alert(count+'개 이전 후 문제가 발생했습니다: '+err.message+' — 로컬 원본은 그대로 남아 있습니다.');}
+}
+
 async function boot() {
  $('#copyrightYear').textContent=new Date().getFullYear();
  try {
