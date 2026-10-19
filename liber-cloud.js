@@ -78,8 +78,35 @@ async function optimizeImage(blob){
   return blob;
  }catch(e){console.warn('Image conversion failed',e);return blob;}
 }
+async function ensurePostCategory(categoryId){
+ if(!categoryId)return null;
+ const id=String(categoryId);
+ const existing=check(await client.from('liber_categories').select('id,kind').eq('id',id).maybeSingle());
+ if(existing){
+  if(existing.kind!=='posts')throw Error('선택한 카테고리가 게시글 분류가 아닙니다.');
+  return id;
+ }
+ // Restore only the selected category and its ancestors from an earlier local draft.
+ // Do not overwrite or delete other remote categories.
+ const ancestry=window.LIBERCategories?.ancestry('posts',id)||[];
+ if(!ancestry.length||ancestry[ancestry.length-1].id!==id)
+  throw Error('선택한 카테고리가 서버에 없고 로컬에서도 찾을 수 없습니다. 카테고리를 다시 선택해 주세요.');
+ for(const item of ancestry){
+  const prior=check(await client.from('liber_categories').select('id,kind').eq('id',item.id).maybeSingle());
+  if(prior){
+   if(prior.kind!=='posts')throw Error('카테고리 ID가 다른 분류와 충돌합니다.');
+   continue;
+  }
+  check(await client.from('liber_categories').insert({
+   id:item.id,kind:'posts',name:String(item.name).slice(0,50),
+   parent_id:item.parentId||null,sort_order:Number.isInteger(item.order)?item.order:0
+  }));
+ }
+ return id;
+}
 async function savePost(p){
  ensureAdmin();
+ const verifiedCategoryId=await ensurePostCategory(p.categoryId);
  const previous=check(await client.from('liber_posts').select('attachments').eq('id',String(p.id)).maybeSingle());
  const previousPaths=(Array.isArray(previous?.attachments)?previous.attachments:[]).map(a=>a.storagePath).filter(Boolean);
  const uploads=[];
@@ -106,7 +133,7 @@ async function savePost(p){
   }
   const row={
    id:String(p.id),title:String(p.title).trim(),subtitle:String(p.subtitle||''),
-   category_id:p.categoryId||null,category:String(p.category||'기타'),
+   category_id:verifiedCategoryId,category:String(p.category||'기타'),
    tags:Array.isArray(p.tags)?p.tags:[],body:String(p.body||''),
    links:Array.isArray(p.links)?p.links:[],
    attachments,published:p.published!==false,demo:p.demo===true,
