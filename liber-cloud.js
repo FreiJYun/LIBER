@@ -19,7 +19,7 @@ async function init(){
 async function refreshAdmin(){
  admin=false;
  if(!user||!client)return false;
- try{const result=await client.rpc('liber_is_admin');admin===false;admin=!!check(result);}
+ try{const result=await client.rpc('liber_is_admin');admin=!!check(result);}
  catch(e){authError=e.message;console.warn(e);}
  return admin;
 }
@@ -176,12 +176,12 @@ async function saveSiteIdentity(value){
 async function sendLogin(email){
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email||''))throw Error('올바른 이메일을 입력해 주세요.');
  const destination=location.origin+location.pathname+'#/admin';
- check(await client.auth.signInWithOtp({email,emailRedirectTo:destination,options:{emailRedirectTo:destination,shouldCreateUser:true}}));
+ check(await client.auth.signInWithOtp({email,options:{emailRedirectTo:destination,shouldCreateUser:true}}));
 }
 async function signOut(){
  check(await client.auth.signOut());
  admin=false;user=null;
 }
 function managementUrl(){return 'https://supabase.com/dashboard/project/muwvbthekagigehnywjx';}
-window.LIBERCloud={init,ready,isAdmin,currentUser,refreshAdmin,posts,post,savePost,deletePost,listCategories,saveCategories,neighbors,saveNeighbors,siteIdentity,saveSiteIdentity,sendLogin,signOut,managementUrl};
+window.LIBERCloud={init,ready,urlFor,isAdmin,currentUser,refreshAdmin,posts,post,savePost,deletePost,listCategories,saveCategories,neighbors,saveNeighbors,siteIdentity,saveSiteIdentity,sendLogin,signOut,managementUrl};
 })();
