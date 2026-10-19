@@ -31,7 +31,7 @@
       const id=marker.getAttribute('data-photo-id'),item=byId.get(id);
       marker.replaceChildren();
       marker.className='liber-inline-photo';
-      marker.setAttribute('contenteditable',editable?'false':'false');
+      marker.setAttribute('contenteditable','false');
       if(editable){marker.setAttribute('draggable','true');marker.setAttribute('role','button');marker.setAttribute('tabindex','0');marker.setAttribute('aria-label','사진 선택 및 설정');}
       else{marker.removeAttribute('draggable');marker.removeAttribute('role');marker.removeAttribute('tabindex');}
       marker.dataset.photoWidth=cleanWidth(marker.dataset.photoWidth);
@@ -139,6 +139,14 @@
         count++;
       }
       if(!count)return;
+      // Keep an editable paragraph after a photo inserted at the very end.
+      if(rich.lastChild?.nodeType===Node.ELEMENT_NODE && rich.lastChild.matches?.('span[data-photo-id]')){
+        const paragraph=document.createElement('p');
+        paragraph.appendChild(document.createElement('br'));
+        rich.appendChild(paragraph);
+        range.selectNodeContents(paragraph);
+        range.collapse(true);
+      }
       caretRange=range.cloneRange();
       const selection=window.getSelection();
       rich.focus();
