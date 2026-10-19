@@ -333,44 +333,105 @@ function setupEditor() {
  });
  $('#saveDraft')?.addEventListener('click',()=>saveEditor(false));
  $('#publishPost')?.addEventListener('click',()=>saveEditor(true));
+ $('#retryDriveBackup')?.addEventListener('click',retryDriveBackup);
+ $('#connectDriveEditor')?.addEventListener('click',()=>{
+  const button=$('#connectDriveEditor');button.disabled=true;
+  const pending=Drive.connect();
+  pending.then(()=>{button.hidden=true;editorMessage('Google Drive 재연결 성공! 이제 다시 게시하거나 원본 백업 재시도를 눌러주세요.');})
+   .catch(error=>editorMessage('Google Drive 재연결 실패: '+error.message,true))
+   .finally(()=>{button.disabled=false;});
+ });
 }
 function renderUploadList() {
  const list=$('#uploadList'); if(!list) return;
  list.innerHTML=editorFiles.map(a=>`<div class="upload-item"><span class="upload-name" title="${escapeHTML(a.name)}">${a.type.startsWith('video/')?'🎬':'▧'} ${escapeHTML(a.name)}${a.blob?.size?' · '+(a.blob.size/1048576).toFixed(1)+'MB':''}</span><button class="remove-item" type="button" data-remove-upload="${escapeHTML(a.id)}" title="첨부 삭제" aria-label="${escapeHTML(a.name)} 첨부 삭제">×</button></div>`).join('');
 }
-async function saveEditor(published) {
- const title=$('#editTitle')?.value.trim(); const body=sanitizeHTML($('#richEditor')?.innerHTML||'');
- if(!title) { toast('게시글 제목을 입력해 주세요.'); $('#editTitle')?.focus(); return; }
- if(!txt(body).trim() && !Inline.ids(body).size) { toast('게시글 본문을 입력해 주세요.'); $('#richEditor')?.focus(); return; }
+function editorMessage(message,isError=false){
+ const status=$('#editorMessage');
+ if(status){status.textContent=message;status.setAttribute('role',isError?'alert':'status');}
+}
+async function retryDriveBackup(){
+ if(!editorId){editorMessage('게시글이 아직 서버에 저장되지 않았습니다. 먼저 게시하기 또는 임시저장을 눌러 주세요.',true);return;}
+ if(!Drive.connected()){
+  const b=$('#connectDriveEditor');if(b)b.hidden=false;
+  editorMessage('Google Drive 연결이 만료됐습니다. 이 화면에서 Google Drive를 다시 연결한 후 백업을 재시도해 주세요.',true);
+  return;
+ }
+ const photos=editorFiles.filter(a=>a.blob&&/^image\//.test(a.type||''));
+ const button=$('#retryDriveBackup');if(button)button.disabled=true;
+ try{
+  const result=await Drive.backupOriginals({id:editorId},photos,editorMessage);
+  editorMessage('Google Drive 원본 사진 '+result.total+'개 백업 완료. 게시글도 Supabase에 저장되어 있습니다.');
+  if(button)button.hidden=true;
+  const connectButton=$('#connectDriveEditor');if(connectButton)connectButton.hidden=true;
+  toast('Google Drive 원본 백업 성공!');
+  location.hash='#/post/'+encodeURIComponent(editorId);
+ }catch(error){
+  console.error('Google Drive retry failed',error);
+  editorMessage('Supabase 게시글은 저장되어 있습니다. Google Drive 원본 백업 재시도 실패: '+error.message+' — 사진 원본이 사라지지 않도록 이 페이지를 닫지 마세요.',true);
+  const connectButton=$('#connectDriveEditor');if(connectButton)connectButton.hidden=Drive.connected();
+ }finally{if(button)button.disabled=false;}
+}
+async function saveEditor(published){
+ const title=$('#editTitle')?.value.trim();
+ const body=sanitizeHTML($('#richEditor')?.innerHTML||'');
+ if(!title){toast('게시글 제목을 입력해 주세요.');$('#editTitle')?.focus();return;}
+ if(!txt(body).trim()&&!Inline.ids(body).size){toast('게시글 본문을 입력해 주세요.');$('#richEditor')?.focus();return;}
+ const photos=editorFiles.filter(a=>a.blob&&/^image\//.test(a.type||''));
+ if(photos.length&&Drive.enabled()&&!Drive.connected()){
+  editorMessage('Google Drive 원본 백업이 켜져 있으나 인증이 만료되었습니다. 사진 원본을 보존하려면 먼저 아래의 Google Drive 다시 연결 버튼을 눌러 주세요.',true);
+  const button=$('#connectDriveEditor');if(button)button.hidden=false;
+  return;
+ }
  const newCat=$('#newCategory')?.value.trim();
- let catId=$('#editCategory')?.value || Cats.byName('posts','기타')?.id;
+ let catId=$('#editCategory')?.value||Cats.byName('posts','기타')?.id;
  if(newCat){
-  if(newCat.length>50){ toast('카테고리 이름은 50자 이하로 입력해 주세요.'); return; }
-  try { catId=Cats.create('posts',newCat,catId||null).id; }
-  catch(e){ toast(e.message); return; }
+  if(newCat.length>50){toast('카테고리 이름은 50자 이하로 입력해 주세요.');return;}
+  try{catId=Cats.create('posts',newCat,catId||null).id;}
+  catch(e){toast(e.message);return;}
  }
  const catNode=Cats.find('posts',catId);
  if(!catNode){toast('카테고리를 선택해 주세요.');return;}
- const cat=catNode.name;
  const tags=Array.from(new Set(($('#editTags')?.value||'').split(',').map(t=>t.trim().slice(0,30)).filter(Boolean))).slice(0,8);
- const links=($('#editLinks')?.value||'').split(/\n/).map(x=>x.trim()).filter(Boolean).filter(x=>{try {const u=new URL(x);return ['http:','https:'].includes(u.protocol);}catch{return false;}}).slice(0,20);
- const buttons=[$('#saveDraft'),$('#publishPost')]; buttons.forEach(b=>{if(b)b.disabled=true;});
- try {
+ const links=($('#editLinks')?.value||'').split(/\n/).map(x=>x.trim()).filter(Boolean).filter(x=>{try{const u=new URL(x);return ['http:','https:'].includes(u.protocol);}catch{return false;}}).slice(0,20);
+ const buttons=[$('#saveDraft'),$('#publishPost')];buttons.forEach(b=>{if(b)b.disabled=true;});
+ let cloudSaved=false;
+ try{
   await Cats.sync();
   const prev=editorId?await getPost(editorId):null;
- const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(), title,subtitle:$('#editSubtitle')?.value.trim()||'',category:cat,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
-  await putPost(post,message=>{const status=$('#editorMessage');if(status){status.setAttribute('role','status');status.textContent=message;}}); editorId=post.id; toast(published?'클라우드에 게시했습니다.':'클라우드에 임시저장했습니다.'); location.hash=published?`#/post/${encodeURIComponent(post.id)}`:`#/write/${encodeURIComponent(post.id)}`; if(!published && location.hash===`#/write/${encodeURIComponent(post.id)}`) await render(); }
- catch(err) {
-  console.error('LIBER cloud save failed',err);
-  const reason=String(err?.message||'알 수 없는 오류').slice(0,250);
-  const help=$('#editorMessage');
-  if(help){
-   help.setAttribute('role','alert');
-   help.textContent='클라우드 저장 실패: '+reason+' — 현재 글은 편집기에 남아 있습니다. 새로고침하지 말고 제목과 본문을 복사해 보관해 주세요.';
+  const post={id:prev?.id||uid(),createdAt:prev?.createdAt||Date.now(),updatedAt:Date.now(),title,subtitle:$('#editSubtitle')?.value.trim()||'',category:catNode.name,categoryId:catId,tags,body,attachments:editorFiles.map(a=>({...a})),links,published,demo:false};
+  const stored=await putPost(post,editorMessage);
+  cloudSaved=true;editorId=post.id;
+  // Preserve original File blobs until the Drive backup succeeds. Also reuse
+  // Supabase storage paths on any retry so publishing cannot duplicate images.
+  editorFiles=editorFiles.map(item=>{
+   const remote=stored?.attachments?.find(a=>String(a.id)===String(item.id));
+   return remote?{...item,storagePath:remote.storagePath,remoteUrl:remote.remoteUrl}:item;
+  });
+  if(photos.length&&Drive.enabled()){
+   try{
+    const backup=await Drive.backupOriginals(post,photos,editorMessage);
+    editorMessage('Supabase 저장과 Google Drive 원본 '+backup.total+'개 백업이 완료됐습니다.');
+   }catch(error){
+    console.error('Google Drive original backup failed',error);
+    editorMessage('게시글은 Supabase에 정상 저장됐지만 Google Drive 원본 백업은 실패했습니다: '+error.message+' — 새로고침하거나 이 페이지를 닫지 말고 아래의 백업 재시도 버튼을 누르세요.',true);
+    const retry=$('#retryDriveBackup');if(retry)retry.hidden=false;
+    const reconnect=$('#connectDriveEditor');if(reconnect)reconnect.hidden=Drive.connected();
+    toast('게시글 저장 성공 · Google 원본 백업 실패');
+    return;
+   }
   }
-  toast('저장 실패: '+reason.slice(0,100));
- }
- finally {buttons.forEach(b=>{if(b)b.disabled=false;});}
+  const retry=$('#retryDriveBackup');if(retry)retry.hidden=true;
+  const reconnect=$('#connectDriveEditor');if(reconnect)reconnect.hidden=true;
+  toast(published?'클라우드에 게시했습니다.':'클라우드에 임시저장했습니다.');
+  location.hash=published?'#/post/'+encodeURIComponent(post.id):'#/write/'+encodeURIComponent(post.id);
+  if(!published&&location.hash==='#/write/'+encodeURIComponent(post.id))await render();
+ }catch(error){
+  console.error('LIBER save failed',error);
+  const reason=String(error?.message||'알 수 없는 오류').slice(0,250);
+  editorMessage((cloudSaved?'게시글은 Supabase에 저장됐지만 이후 처리가 실패했습니다: ':'클라우드 저장 실패: ')+reason+' — 작성 중인 글은 편집기에 남아 있습니다. 새로고침하지 말고 보관해 주세요.',true);
+  toast('저장 처리 오류: '+reason.slice(0,100));
+ }finally{buttons.forEach(b=>{if(b)b.disabled=false;});}
 }
 function setupSettings() {
  $$('.settings-nav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); const id=a.dataset.settingsAnchor; $$('.settings-nav a').forEach(x=>x.classList.toggle('active',x===a)); document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}); }));
