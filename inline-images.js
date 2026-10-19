@@ -26,7 +26,7 @@
   }
   function hydrate(root,attachments,objectURL,editable=false) {
     if(!root)return;
-    const byId=new Map((attachments||[]).filter(x=>x?.id&&x.blob&&/^image\//.test(x.type||'')).map(x=>[String(x.id),x]));
+    const byId=new Map((attachments||[]).filter(x=>x?.id&&(x.blob||x.remoteUrl)&&/^image\//.test(x.type||'')).map(x=>[String(x.id),x]));
     root.querySelectorAll('span[data-photo-id]').forEach(marker=>{
       const id=marker.getAttribute('data-photo-id'),item=byId.get(id);
       marker.replaceChildren();
@@ -38,7 +38,7 @@
       marker.dataset.photoAlign=cleanAlign(marker.dataset.photoAlign);
       if(item) {
         const img=document.createElement('img');
-        img.src=objectURL(item.blob);
+        img.src=objectURL(item);
         img.alt=item.name||'본문 사진';
         img.loading=editable?'eager':'lazy';
         img.draggable=false;
