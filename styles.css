@@ -233,3 +233,25 @@ a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}button,input,se
 .article-body .liber-inline-photo-caption{text-align:center;margin-top:9px}
 @media(max-width:700px){.inline-photo-controls-grid{grid-template-columns:1fr 1fr}.inline-photo-controls-grid label:first-child{grid-column:1/-1}.liber-inline-photo[data-photo-width="50"]{width:65%}}
 @media(max-width:390px){.inline-photo-controls-grid{grid-template-columns:1fr}.inline-photo-controls-grid label:first-child{grid-column:auto}.liber-inline-photo[data-photo-width="50"]{width:80%}}
+
+
+/* Cloud publishing: owner-only editing and admin login */
+body:not(.is-liber-admin) .header-write{display:none!important}
+body:not(.is-liber-admin) .neighbor-manager,
+body:not(.is-liber-admin) .neighbor-card-tools,
+body:not(.is-liber-admin) #neighborOpenManager{display:none!important}
+body:not(.is-liber-admin) #identityForm,
+body:not(.is-liber-admin) #exportData,
+body:not(.is-liber-admin) #importData,
+body:not(.is-liber-admin) #migrateLocalPosts{display:none!important}
+.cloud-admin-shell{max-width:850px}
+.cloud-admin-shell .panel{padding:30px}
+.cloud-admin-shell .panel h3{font-size:19px;margin:0 0 15px}
+.cloud-admin-shell .panel p{line-height:1.85;color:var(--muted);margin:12px 0}
+.cloud-login-form{display:flex;flex-direction:column;align-items:flex-start;gap:13px}
+.cloud-login-form label{font-size:13px;font-weight:700;color:var(--ink)}
+.cloud-login-form input{max-width:440px;width:100%;border:1px solid var(--border);border-radius:6px;padding:14px;background:var(--paper);color:var(--ink);font:inherit}
+.cloud-bootstrap-sql{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7;background:var(--paper-soft);padding:18px;border:1px solid var(--border);border-radius:8px;user-select:all}
+.cloud-login-identity{color:var(--accent)!important;font-size:12px}
+.cloud-admin-link{color:var(--accent)!important}
+#cloudAuthStatus:not(:empty){margin-top:18px;border-left:3px solid var(--gold);padding:12px;background:var(--paper-soft)}
