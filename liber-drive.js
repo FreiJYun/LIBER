@@ -8,7 +8,7 @@ const uploads='https://www.googleapis.com/upload/drive/v3/files';
 const rootName='LIBER - 원본 사진 백업';
 let accessToken='',expiresAt=0,tokenClient=null,folderRoot=null;
 const prefKey='liber_google_backup_enabled_v1';
-function enabled(){try{return localStorage.getItem(prefKey)==='yes';}catch{return false;}}
+function enabled(){if(connected())return true;try{return localStorage.getItem(prefKey)==='yes';}catch{return false;}}
 function preference(value){try{localStorage.setItem(prefKey,value?'yes':'no');}catch{}}
 function connected(){return !!accessToken&&Date.now()<expiresAt-60000;}
 function authorized(){if(!window.LIBERCloud?.isAdmin())throw Error('LIBER 관리자 인증이 필요합니다.');}
