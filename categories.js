@@ -1,4 +1,4 @@
-/* LIBER category hierarchies. Public data: categories.json; edits are local until committed on GitHub. */
+/* LIBER category hierarchies: Supabase-backed public tree with offline draft recovery. */
 (() => {
 'use strict';
 const DATA_URL = './categories.json', KEY = 'liber_category_draft_v1';
@@ -175,7 +175,7 @@ function page(){
  '<div class="category-actions"><button class="btn" type="submit">'+(item?'변경 저장':'+ 추가')+'</button>'+
  (item?'<button class="btn btn-outline" type="button" id="categoryAddChild">+ 하위 추가</button><button class="btn btn-outline" type="button" id="categoryMoveFirst">⇤ 맨 위로</button><button class="btn btn-outline" type="button" id="categoryMoveUp">↑ 위로</button><button class="btn btn-outline" type="button" id="categoryMoveDown">↓ 아래로</button><button class="btn btn-outline" type="button" id="categoryMoveLast">⇥ 맨 아래로</button><button class="btn btn-outline" type="button" id="categoryDelete">삭제</button>':'')+'</div></form><p class="category-tip">'+(item?esc(breadcrumb(kind,item.id)):'왼쪽에서 분류를 선택해 수정하거나, 이름을 입력해 새 분류를 만드세요.')+'</p></section></div>'+
  '<div class="neighbor-publish category-publish"><h2>클라우드 저장 및 백업</h2><p>카테고리 변경은 Supabase에 자동 저장됩니다. JSON 내보내기는 별도 백업용으로 사용하세요.</p>'+
- '<div class="neighbor-form-actions"><button class="btn" type="button" id="categoryCopy">① JSON 복사</button><a class="btn btn-outline" target="_blank" rel="noopener noreferrer" href="https://github.com/FreiJYun/LIBER/edit/main/categories.json">② GitHub 파일 편집 ↗</a><button class="btn btn-outline" type="button" id="categoryDownload">JSON 다운로드</button><button class="btn btn-outline" type="button" id="categoryReset">로컬 변경 취소</button></div></div></div></section>';
+ '<div class="neighbor-form-actions"><button class="btn" type="button" id="categoryCopy">① JSON 복사</button><a class="btn btn-outline" target="_blank" rel="noopener noreferrer" href="https://supabase.com/dashboard/project/muwvbthekagigehnywjx/editor">② Supabase 목록 확인 ↗</a><button class="btn btn-outline" type="button" id="categoryDownload">JSON 다운로드</button><button class="btn btn-outline" type="button" id="categoryReset">로컬 변경 취소</button></div></div></div></section>';
 }
 function refresh(){
  const root=document.querySelector('#app');if(!root)return;
@@ -256,7 +256,7 @@ function setup(){
   const a=document.createElement('a');a.href=url;a.download='categories.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2500);
  });
  root.querySelector('#categoryReset')?.addEventListener('click',()=>{
-  if(!confirm('이 브라우저에서 변경한 카테고리 목록을 버리고 GitHub 공개 목록으로 되돌릴까요?'))return;
+  if(!confirm('이 브라우저에서 변경한 카테고리 목록을 버리고 클라우드 공개 목록으로 되돌릴까요?'))return;
   localStorage.removeItem(KEY);data=structuredClone(publicData);dirty=false;selected='';notice('공개 카테고리 목록으로 복원했습니다.');
  });
 }
