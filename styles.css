@@ -273,3 +273,14 @@ body:not(.is-liber-admin) .journal-sidebar-edit{display:none!important}
 .drive-actions [hidden],#retryDriveBackup[hidden],#connectDriveEditor[hidden]{display:none!important}
 #driveConnectionStatus{margin-top:10px;overflow-wrap:anywhere}
 #retryDriveBackup,#connectDriveEditor{white-space:normal}
+
+/* LIBER editor/article horizontal divider: a restrained Roman gold rule. */
+.rich-editor hr,.article-body hr{
+  display:block;
+  border:0;
+  height:1px;
+  margin:2.1em 0;
+  background:linear-gradient(90deg,transparent 0%,var(--gold) 15%,var(--gold) 85%,transparent 100%);
+  opacity:.85;
+  clear:both;
+}
