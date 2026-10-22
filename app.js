@@ -347,6 +347,34 @@ function setupSearch() {
 }
 function setupEditor() {
  const rich=$('#richEditor'); if(!rich) return;
+ const colorPicker=$('#editorTextColor');
+ let colorSelectionRange=null;
+ const rememberColorSelection=()=>{
+  const selection=window.getSelection();
+  if(!selection?.rangeCount)return;
+  const range=selection.getRangeAt(0);
+  if(rich.contains(range.commonAncestorContainer))colorSelectionRange=range.cloneRange();
+ };
+ rich.addEventListener('mouseup',rememberColorSelection);
+ rich.addEventListener('keyup',rememberColorSelection);
+ colorPicker?.closest('.editor-color-picker')?.addEventListener('pointerdown',rememberColorSelection);
+ colorPicker?.addEventListener('focus',rememberColorSelection);
+ colorPicker?.addEventListener('change',()=>{
+  const value=safeTextColor(colorPicker.value);
+  if(!value||!colorSelectionRange){toast('본문에서 글자를 먼저 선택하거나 커서를 놓아 주세요.');return;}
+  const range=colorSelectionRange.cloneRange();
+  if(!rich.contains(range.commonAncestorContainer)){toast('본문의 선택 영역이 변경됐습니다. 다시 선택해 주세요.');return;}
+  rich.focus();
+  const selection=window.getSelection();
+  selection?.removeAllRanges();selection?.addRange(range);
+  // The browser may create either <span style="color:..."> or <font color="...">.
+  // sanitizeHTML converts both to safe, persistent color-only spans.
+  document.execCommand('styleWithCSS',false,true);
+  const success=document.execCommand('foreColor',false,value);
+  document.execCommand('styleWithCSS',false,false);
+  if(!success){toast('이 브라우저에서는 선택한 글자의 색을 변경할 수 없습니다.');return;}
+  rememberColorSelection();
+ });
  // Prevent untrusted HTML from being pasted into contenteditable.
  rich.addEventListener('paste',e=>{ e.preventDefault(); const plain=e.clipboardData.getData('text/plain'); rich.focus(); document.execCommand('insertText',false,plain); });
  renderUploadList();
